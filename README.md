@@ -31,9 +31,11 @@ Lineage MCP is a file operation server for LLM coding agents that solves two cri
 ### Prerequisites
 
 - Python 3.10 or higher
-- pip (Python package manager)
+- pip (Python package manager) or [uv](https://docs.astral.sh/uv/)
 
 ### Installation
+
+#### Using pip
 
 ```bash
 # Clone the repository
@@ -44,9 +46,22 @@ cd lineage-mcp
 pip install -r requirements.txt
 ```
 
+#### Using uv (faster alternative)
+
+```bash
+# Clone the repository
+git clone https://github.com/imattpeters/lineage-mcp.git
+cd lineage-mcp
+
+# Install dependencies with uv
+uv pip install -r requirements.txt
+```
+
+[uv](https://docs.astral.sh/uv/) is a fast Python package manager written in Rust. It's fully compatible with `requirements.txt` and offers significantly faster dependency installation.
+
 ## MCP Client Configuration
 
-### Python
+### Python (standard)
 
 ```json
 {
@@ -58,6 +73,21 @@ pip install -r requirements.txt
   }
 }
 ```
+
+### Python with uv
+
+```json
+{
+  "mcpServers": {
+    "lineage": {
+      "command": "uv",
+      "args": ["run", "python", "/path/to/lineage-mcp/lineage.py", "/your/workspace"]
+    }
+  }
+}
+```
+
+Using `uv run` ensures dependencies are installed and the script runs in the correct environment.
 
 ### Docker
 
@@ -270,8 +300,11 @@ lineage-mcp/
 ## Testing
 
 ```bash
-# Run all tests
+# Using pip/standard Python
 python -m pytest tests/ -v
+
+# Using uv
+uv run pytest tests/ -v
 
 # Run specific test module
 python -m pytest tests/test_read_file.py -v
