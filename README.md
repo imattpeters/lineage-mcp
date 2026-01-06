@@ -7,6 +7,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Author](https://img.shields.io/badge/Author-Matt%20Peters-blue)](https://www.mattpeters.co.uk)
 
+### 📖 [Read the Blog Post](https://www.mattpeters.co.uk/blog/04-lineage-mcp)
+
+I've published a post talking about why I made this tool, Take a look if your interested.
+
 ## What is Lineage MCP?
 
 Lineage MCP is a file operation server for LLM coding agents that solves two critical problems:
