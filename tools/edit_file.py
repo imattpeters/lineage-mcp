@@ -48,7 +48,7 @@ async def edit_file(
     # Count occurrences
     count = content.count(old_string)
     if count == 0:
-        return f"Error: String not found in file: {old_string!r}"
+        return f"Error: String not found in file"
 
     if not replace_all and count > 1:
         return f"Error: String found {count} times. Use replace_all=True to replace all, or make the string more specific."

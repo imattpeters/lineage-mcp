@@ -5,6 +5,7 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![MCP](https://img.shields.io/badge/MCP-compatible-green.svg)](https://modelcontextprotocol.io/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Author](https://img.shields.io/badge/Author-Matt%20Peters-blue)](https://www.mattpeters.co.uk)
 
 ## What is Lineage MCP?
 
@@ -291,5 +292,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ## Acknowledgments
+
+Created by [Matt Peters](https://www.mattpeters.co.uk) - Senior Software Architect.
 
 Built with [FastMCP](https://github.com/modelcontextprotocol/python-sdk) from the Model Context Protocol team.
