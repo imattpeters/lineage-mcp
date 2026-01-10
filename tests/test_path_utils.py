@@ -76,6 +76,59 @@ class TestFileMtime(unittest.TestCase):
             self.assertIsInstance(mtime, int)
             self.assertGreater(mtime, 0)
 
+    def test_get_file_mtime_ms_magnitude(self) -> None:
+        """Verify mtime is in milliseconds, not seconds or nanoseconds."""
+        with TempWorkspace() as ws:
+            from path_utils import get_file_mtime_ms
+            import time
+
+            file_path = ws.create_file("test.txt", "content")
+            mtime_ms = get_file_mtime_ms(file_path)
+            current_time_ms = int(time.time() * 1000)
+
+            # Mtime should be close to current time in milliseconds
+            # Should be within ~10 seconds (10000 ms) of now
+            self.assertLess(abs(mtime_ms - current_time_ms), 10000)
+
+            # Sanity check: should be in milliseconds range (not seconds or nanoseconds)
+            # A reasonable file mtime is between Jan 2000 and Dec 2100
+            # In ms: 946684800000 to 4102444800000
+            self.assertGreater(mtime_ms, 946684800000)
+            self.assertLess(mtime_ms, 4102444800000)
+
+    def test_get_file_mtime_ms_precision(self) -> None:
+        """Verify mtime retains millisecond precision from st_mtime_ns."""
+        with TempWorkspace() as ws:
+            from path_utils import get_file_mtime_ms
+
+            file_path = ws.create_file("test.txt", "content")
+
+            # Get both the raw stat and the converted mtime
+            stat = file_path.stat()
+            mtime_ms = get_file_mtime_ms(file_path)
+
+            # Verify the conversion is correct: st_mtime_ns / 1_000_000
+            expected_mtime = int(stat.st_mtime_ns / 1_000_000)
+            self.assertEqual(mtime_ms, expected_mtime)
+
+    def test_get_file_mtime_ms_different_files_different_mtimes(self) -> None:
+        """Verify different files can have different mtimes."""
+        import time
+        with TempWorkspace() as ws:
+            from path_utils import get_file_mtime_ms
+
+            file1 = ws.create_file("test1.txt", "content1")
+            mtime1 = get_file_mtime_ms(file1)
+
+            # Small sleep to ensure different mtime
+            time.sleep(0.01)
+
+            file2 = ws.create_file("test2.txt", "content2")
+            mtime2 = get_file_mtime_ms(file2)
+
+            # file2 should have a later mtime
+            self.assertGreater(mtime2, mtime1)
+
 
 if __name__ == "__main__":
     unittest.main()

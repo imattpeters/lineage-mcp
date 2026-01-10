@@ -1,0 +1,1 @@
+C:/git/lineage-mcp/AGENTS.md

@@ -108,7 +108,7 @@ def get_file_mtime_ms(file_path: Path) -> int:
     Raises:
         OSError: If file cannot be stat'ed.
     """
-    return int(file_path.stat().st_mtime * 1000)
+    return int(file_path.stat().st_mtime_ns / 1_000_000)
 
 
 def is_instruction_file(file_path: Path, instruction_file_names: list[str]) -> bool:

@@ -30,37 +30,70 @@ def calculate_changed_line_ranges(old_content: str, new_content: str) -> str:
         old_lines = old_content.splitlines(keepends=False)
         new_lines = new_content.splitlines(keepends=False)
 
-        # Generate unified diff
+        # Generate unified diff with context=0 to minimize output
         diff = list(unified_diff(old_lines, new_lines, lineterm="", n=0))
 
-        # Extract line numbers from diff output
-        current_start: int | None = None
-        current_end: int | None = None
+        # Track changed line numbers in new file
+        changed_lines: set[int] = set()
+        current_line_num: int | None = None
 
         for line in diff:
             if line.startswith("@@"):
-                # Parse line numbers from @@ -a,b +c,d @@
+                # Parse @@ -old_start,old_count +new_start,new_count @@
                 try:
-                    parts = line.split()[2]  # Get +c,d part
-                    line_info = parts.split(",")[0].lstrip("+")
-                    line_num = int(line_info)
-
-                    if current_start is None:
-                        current_start = line_num
-                    current_end = line_num
+                    # Extract +new_start,new_count part
+                    parts = line.split()
+                    if len(parts) < 3:
+                        continue
+                    new_range = parts[2]  # Format: +start,count or +start
+                    new_start = int(new_range.lstrip("+").split(",")[0])
+                    current_line_num = new_start
                 except (ValueError, IndexError):
+                    current_line_num = None
                     continue
-            elif line.startswith("+") or line.startswith("-"):
-                # Track that this is part of a changed region
-                if current_start is not None:
-                    current_end = (current_end or current_start) + 1
+            elif current_line_num is not None and (line.startswith("+") or line.startswith("-")):
+                # Added or removed line - mark as changed
+                if line.startswith("+"):
+                    changed_lines.add(current_line_num)
+                    current_line_num += 1
+                elif line.startswith("-"):
+                    # Line was removed - don't increment, it affects alignment
+                    pass
+                else:
+                    current_line_num += 1
+            elif current_line_num is not None and not line.startswith(("@@", "\\")) and line:
+                # Context line - increment line number but don't mark as changed
+                current_line_num += 1
 
-        # Combine overlapping or adjacent ranges
-        if current_start is not None and current_end is not None:
-            return f"{current_start}-{current_end}"
+        if not changed_lines:
+            return f"1-{len(new_lines)}" if new_lines else "1-EOF"
 
-        # If no specific changes detected, report all lines
-        return f"1-{len(new_lines)}" if new_lines else "1-EOF"
+        # Build ranges from changed lines
+        sorted_lines = sorted(changed_lines)
+        ranges: list[str] = []
+        range_start = sorted_lines[0]
+        range_end = sorted_lines[0]
+
+        for line_num in sorted_lines[1:]:
+            if line_num == range_end + 1:
+                # Contiguous range
+                range_end = line_num
+            else:
+                # Gap - save current range and start new one
+                if range_start == range_end:
+                    ranges.append(str(range_start))
+                else:
+                    ranges.append(f"{range_start}-{range_end}")
+                range_start = line_num
+                range_end = line_num
+
+        # Save final range
+        if range_start == range_end:
+            ranges.append(str(range_start))
+        else:
+            ranges.append(f"{range_start}-{range_end}")
+
+        return ",".join(ranges)
 
     except Exception:
         # Fallback to simple "entire file" if diff fails

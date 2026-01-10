@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Author](https://img.shields.io/badge/Author-Matt%20Peters-blue)](https://www.mattpeters.co.uk)
 
-### 📖 [Read the Blog Post](https://www.mattpeters.co.uk/blog/04-lineage-mcp)
+### [Read the Blog Post](https://www.mattpeters.co.uk/blog/04-lineage-mcp)
 
 I've published a post talking about why I made this tool, Take a look if your interested.
 
@@ -21,14 +21,14 @@ Lineage MCP is a file operation server for LLM coding agents that solves two cri
 
 ## Features
 
-| Feature                     | Description                                                     |
-| --------------------------- | --------------------------------------------------------------- |
-| 📁 **File Operations**       | List, search, read, write, edit, and delete files               |
-| 🔍 **Change Detection**      | Line-level diff detection for externally modified files         |
-| 📚 **Instruction Discovery** | Auto-finds AGENTS.md, CLAUDE.md, etc. in parent directories     |
-| 🔒 **Security**              | Path traversal protection keeps operations within the workspace |
-| ⚡ **Partial Reads**         | Read specific line ranges for large files (offset/limit)        |
-| 📍 **Line Numbers**          | Optional line number formatting for precise code references     |
+| Feature                   | Description                                                     |
+| ------------------------- | --------------------------------------------------------------- |
+| **File Operations**       | List, search, read, write, edit, and delete files               |
+| **Change Detection**      | Line-level diff detection for externally modified files         |
+| **Instruction Discovery** | Auto-finds AGENTS.md, CLAUDE.md, etc. in parent directories     |
+| **Security**              | Path traversal protection keeps operations within the workspace |
+| **Partial Reads**         | Read specific line ranges for large files (offset/limit)        |
+| **Line Numbers**          | Optional line number formatting for precise code references     |
 
 ## Quick Start
 
@@ -100,13 +100,29 @@ Using `uv run` ensures dependencies are installed and the script runs in the cor
   "mcpServers": {
     "lineage": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "--name", "lineage-mcp", "-v", "/your/workspace:/data", "lineage-mcp"]
+      "args": ["run", "-i", "--rm", "-v", "/your/workspace:/data", "lineage-mcp"]
     }
   }
 }
 ```
 
+**Docker arguments explained:**
+
+- `run` - Start a new container
+- `-i` - Enable interactive mode (required for MCP's stdin-based communication)
+- `--rm` - Automatically remove the container when it exits (prevents clutter)
+- `-v /your/workspace:/data` - Mount your project directory to `/data` inside the container (the server uses `/data` as the base directory)
+- `lineage-mcp` - The Docker image name
+
 **Windows paths:** Use forward slashes (`C:/git/project`) or escaped backslashes (`C:\\git\\project`).
+
+**Building the Docker image:**
+
+Before using Docker, build the image from the lineage-mcp directory:
+
+```bash
+docker build -t lineage-mcp .
+```
 
 ## Tools Reference
 
