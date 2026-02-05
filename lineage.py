@@ -5,11 +5,22 @@ and instruction file discovery.
 """
 
 import sys
+from typing import Dict, List
 
 from mcp.server.fastmcp import FastMCP
 
 from path_utils import init_base_dir_from_args
-from tools import clear_cache, delete_file, edit_file, list_files, read_file, search_files, write_file
+from tools import (
+    clear_cache,
+    delete_file,
+    edit_file,
+    list_files,
+    multi_edit_file,
+    multi_read_file,
+    read_file,
+    search_files,
+    write_file,
+)
 
 # Initialize base directory from command line argument
 init_base_dir_from_args()
@@ -175,6 +186,76 @@ async def edit(
 
 
 @mcp.tool()
+async def multi_edit(
+    edits: List[Dict],
+    new_session: bool = False,
+) -> str:
+    """Edit multiple files by replacing exact string matches in a single batch.
+
+    Performs targeted string replacements across multiple files in one call.
+    Each edit specifies a file, old_string, and new_string. If one edit fails,
+    remaining edits still proceed.
+
+    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
+    call you made in this conversation (not a summary)?
+      → NO or UNSURE: new_session=True is REQUIRED
+      → YES, I see complete previous output: new_session=False is fine
+
+    Missing this = missing AGENTS.md instruction files. When in doubt, always
+    use new_session=True - it's safe.
+
+    Args:
+        edits: List of edit operations. Each dict must contain:
+            - file_path (str): Path to the file relative to the base directory
+            - old_string (str): Exact text to find and replace
+            - new_string (str): Text to replace old_string with
+            - replace_all (bool, optional): If True, replace all occurrences.
+              Defaults to False.
+        new_session: Set True if you cannot see full output of a previous lineage
+                     call in this conversation. Clears server caches so instruction
+                     files are re-provided. Safe to use when uncertain.
+
+    Returns:
+        Combined results for all edits, with per-edit success/error messages.
+    """
+    return await multi_edit_file(edits, new_session)
+
+
+@mcp.tool()
+async def multi_read(
+    file_paths: List[str],
+    new_session: bool = False,
+    show_line_numbers: bool = False,
+) -> str:
+    """Read the contents of multiple files in a single call (max 5).
+
+    Reads up to 5 files at once, returning their contents with clear separators.
+    Tracks all files for change detection and discovers instruction files.
+
+    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
+    call you made in this conversation (not a summary)?
+      → NO or UNSURE: new_session=True is REQUIRED
+      → YES, I see complete previous output: new_session=False is fine
+
+    Missing this = missing AGENTS.md instruction files. When in doubt, always
+    use new_session=True - it's safe.
+
+    Args:
+        file_paths: List of file paths relative to the base directory (max 5).
+        new_session: Set True if you cannot see full output of a previous lineage
+                     call in this conversation. Clears server caches so instruction
+                     files are re-provided. Safe to use when uncertain.
+        show_line_numbers: If True, format output with line numbers (N→content).
+                          Defaults to False.
+
+    Returns:
+        Combined file contents with per-file headers, [CHANGED_FILES] and
+        [AGENTS.MD] sections appended at the end.
+    """
+    return await multi_read_file(file_paths, new_session, show_line_numbers)
+
+
+@mcp.tool()
 async def delete(file_path: str, new_session: bool = False) -> str:
     """Delete a file or empty directory.
 
@@ -214,5 +295,15 @@ async def clear() -> str:
     return await clear_cache()
 
 
-if __name__ == "__main__":
+def main():
+    """Entry point for CLI: lineage-mcp /path/to/base/dir
+
+    This function is called when users run `lineage-mcp` from the command line
+    after installing the package via pip. The base directory is already
+    initialized from command-line arguments at module import time.
+    """
     mcp.run()
+
+
+if __name__ == "__main__":
+    main()
