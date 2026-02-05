@@ -19,7 +19,7 @@ async def list_files(path: str = "", new_session: bool = False) -> str:
     """
     # Handle new_session - clear all caches
     if new_session:
-        session.clear()
+        session.try_new_session()
 
     base_dir = get_base_dir()
     result = resolve_path(path)

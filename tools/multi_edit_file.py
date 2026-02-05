@@ -32,7 +32,7 @@ async def multi_edit_file(
     """
     # Handle new_session - clear all caches
     if new_session:
-        session.clear()
+        session.try_new_session()
 
     if not edits:
         return "Error: No edits provided"

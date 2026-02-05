@@ -20,7 +20,7 @@ async def search_files(pattern: str, path: str = "", new_session: bool = False) 
     """
     # Handle new_session - clear all caches
     if new_session:
-        session.clear()
+        session.try_new_session()
 
     base_dir = get_base_dir()
     result = resolve_path(path)

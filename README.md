@@ -24,11 +24,13 @@ Lineage MCP is a file operation server for LLM coding agents that solves two cri
 | Feature                   | Description                                                     |
 | ------------------------- | --------------------------------------------------------------- |
 | **File Operations**       | List, search, read, write, edit, and delete files               |
+| **Batch Operations**      | Read up to 5 files or apply multiple edits in a single call     |
 | **Change Detection**      | Line-level diff detection for externally modified files         |
 | **Instruction Discovery** | Auto-finds AGENTS.md, CLAUDE.md, etc. in parent directories     |
 | **Security**              | Path traversal protection keeps operations within the workspace |
 | **Partial Reads**         | Read specific line ranges for large files (offset/limit)        |
 | **Line Numbers**          | Optional line number formatting for precise code references     |
+| **Session Cooldown**      | Prevents redundant cache clears during initial AI tool bursts   |
 
 ## Quick Start
 
@@ -126,15 +128,17 @@ docker build -t lineage-mcp .
 
 ## Tools Reference
 
-| Tool     | Description                    | Parameters                                                            |
-| -------- | ------------------------------ | --------------------------------------------------------------------- |
-| `list`   | List directory contents        | `path` (optional), `new_session`                                      |
-| `search` | Search files by glob pattern   | `pattern`, `path` (optional), `new_session`                           |
-| `read`   | Read file with change tracking | `file_path`, `new_session`, `show_line_numbers`, `offset`, `limit`    |
-| `write`  | Write content to file          | `file_path`, `content`, `new_session`                                 |
-| `edit`   | Replace string in file         | `file_path`, `old_string`, `new_string`, `replace_all`, `new_session` |
-| `delete` | Delete file or empty directory | `file_path`, `new_session`                                            |
-| `clear`  | Clear all session caches       | (none)                                                                |
+| Tool         | Description                         | Parameters                                                            |
+| ------------ | ----------------------------------- | --------------------------------------------------------------------- |
+| `list`       | List directory contents             | `path` (optional), `new_session`                                      |
+| `search`     | Search files by glob pattern        | `pattern`, `path` (optional), `new_session`                           |
+| `read`       | Read file with change tracking      | `file_path`, `new_session`, `show_line_numbers`, `offset`, `limit`    |
+| `multi_read` | Read up to 5 files in one call      | `file_paths`, `new_session`, `show_line_numbers`                      |
+| `write`      | Write content to file               | `file_path`, `content`, `new_session`                                 |
+| `edit`       | Replace string in file              | `file_path`, `old_string`, `new_string`, `replace_all`, `new_session` |
+| `multi_edit` | Batch string replacements           | `edits`, `new_session`                                                |
+| `delete`     | Delete file or empty directory      | `file_path`, `new_session`                                            |
+| `clear`      | Clear all session caches            | (none)                                                                |
 
 ## Usage Examples
 
@@ -181,6 +185,31 @@ edit("config.py", "old_value", "new_value")
 
 # Replace all occurrences
 edit("config.py", "DEBUG = True", "DEBUG = False", replace_all=True)
+```
+
+### Batch File Reading
+
+```python
+# Read up to 5 files in one call
+multi_read(["src/app.py", "src/config.py", "README.md"])
+
+# With line numbers
+multi_read(["src/app.py", "src/utils.py"], show_line_numbers=True)
+```
+
+### Batch Editing
+
+```python
+# Edit multiple files in a single call
+multi_edit([
+    {"file_path": "src/app.py", "old_string": "v1", "new_string": "v2"},
+    {"file_path": "src/config.py", "old_string": "DEBUG = True", "new_string": "DEBUG = False"},
+])
+
+# With replace_all per edit
+multi_edit([
+    {"file_path": "src/app.py", "old_string": "old_func", "new_string": "new_func", "replace_all": True},
+])
 ```
 
 ## Change Detection
@@ -280,6 +309,14 @@ When caches are cleared:
 - Instruction files will be re-appended to responses
 - Change detection restarts from a clean slate
 
+### new_session Cooldown
+
+When `new_session=True` clears caches, subsequent `new_session=True` calls within 30 seconds are silently ignored. This prevents redundant cache clears during the initial burst of tool calls that AI agents typically make at the start of a conversation.
+
+- The cooldown is configurable via `newSessionCooldownSeconds` in `appsettings.json`
+- The explicit `clear()` tool always works regardless of cooldown
+- Set to `0` to disable the cooldown entirely
+
 **If an agent is missing instruction file content**, ask it to call `clear()` to reset the cache.
 
 ## Project Structure
@@ -296,8 +333,10 @@ lineage-mcp/
 │   ├── list_files.py
 │   ├── search_files.py
 │   ├── read_file.py
+│   ├── multi_read_file.py
 │   ├── write_file.py
 │   ├── edit_file.py
+│   ├── multi_edit_file.py
 │   ├── delete_file.py
 │   └── clear_cache.py
 ├── tests/                 # Test suite

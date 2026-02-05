@@ -4,8 +4,14 @@ Provides a centralized dataclass for managing all session state,
 eliminating scattered global variables.
 """
 
+import time
 from dataclasses import dataclass, field
-from typing import Dict
+from typing import Dict, Optional
+
+from config import load_new_session_cooldown_seconds
+
+# Load cooldown at module import
+_NEW_SESSION_COOLDOWN_SECONDS: float = load_new_session_cooldown_seconds()
 
 
 @dataclass
@@ -18,20 +24,48 @@ class SessionState:
         mtimes: Maps absolute file paths to their last-seen modification times (ms).
         contents: Maps absolute file paths to their last-seen content for diffing.
         provided_folders: Set of folder paths where instruction files have been shown.
+        last_new_session_time: Monotonic timestamp of the last new_session clear.
     """
 
     mtimes: Dict[str, int] = field(default_factory=dict)
     contents: Dict[str, str] = field(default_factory=dict)
     provided_folders: set[str] = field(default_factory=set)
+    last_new_session_time: Optional[float] = field(default=None)
 
     def clear(self) -> None:
-        """Clear all session caches.
+        """Clear all session caches unconditionally.
 
-        Called on new_session=True or when resetting state.
+        Called by the explicit clear() tool. Ignores cooldown.
+        Also resets the cooldown timer.
         """
         self.mtimes.clear()
         self.contents.clear()
         self.provided_folders.clear()
+        self.last_new_session_time = None
+
+    def try_new_session(self) -> bool:
+        """Attempt to clear caches for a new_session request.
+
+        If a new_session clear happened within the cooldown window,
+        the request is silently ignored to avoid redundant clears
+        during the initial burst of tool calls.
+
+        Returns:
+            True if caches were actually cleared, False if suppressed by cooldown.
+        """
+        now = time.monotonic()
+
+        if (
+            self.last_new_session_time is not None
+            and (now - self.last_new_session_time) < _NEW_SESSION_COOLDOWN_SECONDS
+        ):
+            return False
+
+        self.mtimes.clear()
+        self.contents.clear()
+        self.provided_folders.clear()
+        self.last_new_session_time = now
+        return True
 
     def track_file(self, file_path: str, mtime_ms: int, content: str) -> None:
         """Track a file's state for change detection.

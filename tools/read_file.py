@@ -35,7 +35,7 @@ async def read_file(
     """
     # Handle new_session - clear all caches
     if new_session:
-        session.clear()
+        session.try_new_session()
 
     # Validate offset/limit
     if offset is not None and offset < 0:

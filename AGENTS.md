@@ -2,6 +2,50 @@
 
 > ⚠️ **CRITICAL**: File ops with **line-level change detection** + **instruction file auto-discovery**. Three patterns: (1) `new_session=True` on first call after compaction, (2) All paths relative to BASE_DIR, (3) Instruction files auto-append from parent dirs.
 
+## 🚫 GIT COMMANDS - CRITICAL RULE
+
+**NEVER run git commands (commit, push, tag, reset, etc.) without explicit user permission.**
+
+This is a public repository. Before running ANY git command, you MUST:
+1. Show the user exactly what command you plan to run
+2. Explain what it will do
+3. Wait for explicit "yes" confirmation
+4. Only then execute the command
+
+Violations of this rule can expose private information or corrupt public history.
+
+## 📝 Git Commit Message Format (Semantic Versioning)
+
+This project uses **python-semantic-release** for automatic versioning. Commit messages determine version bumps:
+
+| Prefix | Version Bump | Example |
+|--------|--------------|---------|
+| `fix:` | Patch (1.0.0 → 1.0.1) | `fix: resolve path handling bug` |
+| `perf:` | Patch (1.0.0 → 1.0.1) | `perf: optimize file reading` |
+| `feat:` | Minor (1.0.0 → 1.1.0) | `feat: add new search tool` |
+| `feat!:` | Major (1.0.0 → 2.0.0) | `feat!: change API interface` |
+| `fix!:` | Major (1.0.0 → 2.0.0) | `fix!: breaking change to config` |
+
+**Non-version commits (no version bump):**
+- `chore:` - maintenance tasks
+- `docs:` - documentation only
+- `ci:` - CI/CD changes
+- `refactor:` - code refactoring
+- `style:` - formatting, whitespace
+- `test:` - adding/updating tests
+
+**With scope (optional):**
+- `fix(path): resolve traversal issue`
+- `feat(tools): add partial read support`
+
+**Breaking changes (use `!` or footer):**
+- `feat!: new config format` OR
+- ```
+  feat: new config format
+
+  BREAKING CHANGE: config.json replaced with appsettings.json
+  ```
+
 ## 🎯 Quick Start
 
 ```bash
@@ -27,13 +71,13 @@ docker build -t lineage-mcp . && docker run -v /your/workspace:/data lineage-mcp
 
 | File                   | Purpose                                                     |
 | ---------------------- | ----------------------------------------------------------- |
-| `lineage.py`           | Entry point, FastMCP server, 6 tool registrations           |
+| `lineage.py`           | Entry point, FastMCP server, 8 tool registrations           |
 | `config.py`            | Loads `appsettings.json`, instruction file names            |
 | `session_state.py`     | `SessionState`: `mtimes`, `contents`, `provided_folders`    |
 | `path_utils.py`        | `PathResult`, `resolve_path()` blocks traversal             |
 | `file_watcher.py`      | `calculate_changed_line_ranges()` via difflib               |
 | `instruction_files.py` | `find_instruction_files_in_parents()`, folder caching       |
-| `tools/*.py`           | One file per tool (read, write, edit, list, search, delete) |
+| `tools/*.py`           | One file per tool (read, multi_read, write, edit, multi_edit, list, search, delete) |
 
 ## 🏛️ Core Patterns
 
@@ -46,6 +90,8 @@ docker build -t lineage-mcp . && docker run -v /your/workspace:/data lineage-mcp
 
 **Missing this = missing AGENTS.md**. When in doubt, use `new_session=True`.
 
+**⏱️ Cooldown**: When `new_session=True` clears caches, subsequent `new_session=True` calls within 30 seconds are silently ignored. This prevents redundant clears during the initial burst of tool calls. Configurable via `newSessionCooldownSeconds` in `appsettings.json`. Explicit `clear()` always works regardless of cooldown.
+
 ```python
 # After restart/compaction - use on ANY tool:
 list(path="", new_session=True)
@@ -55,7 +101,7 @@ read(file_path="src/app/page.tsx", new_session=True)
 read(file_path="src/app/layout.tsx")  # new_session=False default
 
 # Alternative: forgot new_session? Use clear()
-clear()  # Resets all caches
+clear()  # Resets all caches (ignores cooldown)
 ```
 
 ### SessionState
@@ -66,6 +112,10 @@ class SessionState:
     mtimes: dict[str, int]           # {path: mtime_ms}
     contents: dict[str, str]         # {path: content}
     provided_folders: set[str]       # Folders already shown
+    last_new_session_time: float | None  # Monotonic timestamp of last clear
+
+    def clear(self) -> None: ...           # Unconditional clear (resets cooldown)
+    def try_new_session(self) -> bool: ... # Clear with 30s cooldown
 ```
 
 ### Path Resolution
@@ -117,6 +167,8 @@ Config via `appsettings.json`:
 | `read(file_path, new_session, show_line_numbers, offset, limit)`    | Content + [CHANGED_FILES] + [INSTRUCTION_FILE] |
 | `write(file_path, content, new_session)`                            | Success/error                                  |
 | `edit(file_path, old_string, new_string, replace_all, new_session)` | Success/error                                  |
+| `multi_edit(edits, new_session)`                                    | Per-edit success/error + [CHANGED_FILES]       |
+| `multi_read(file_paths, new_session, show_line_numbers)`            | Per-file content + [CHANGED_FILES] + [AGENTS.MD] |
 | `search(pattern, path, new_session)`                                | File list + [CHANGED_FILES]                    |
 | `delete(file_path, new_session)`                                    | Success/error                                  |
 | `clear()`                                                           | Resets all caches                              |
@@ -201,5 +253,4 @@ finally:
 
 When the task requires multiple steps or non-trivial changes, present a detailed plan using #planReview and wait for approval before executing.
 If the plan is rejected, incorporate the comments and submit an updated plan with #planReview.
-When the user asks for a step-by-step guide or walkthrough, present it using #walkthroughReview.
 Always use #askUser before completing any task to confirm the result matches what the user asked for.

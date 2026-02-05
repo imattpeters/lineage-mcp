@@ -20,7 +20,7 @@ async def write_file(file_path: str, content: str, new_session: bool = False) ->
     """
     # Handle new_session - clear all caches
     if new_session:
-        session.clear()
+        session.try_new_session()
 
     result = resolve_path(file_path)
     if not result.success:

@@ -70,6 +70,88 @@ class TestSessionState(unittest.TestCase):
         self.assertEqual(len(state.contents), 0)
         self.assertEqual(len(state.provided_folders), 0)
 
+    def test_clear_resets_cooldown_timer(self) -> None:
+        """Verify explicit clear() resets the cooldown timer."""
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()  # Sets timer
+        self.assertIsNotNone(state.last_new_session_time)
+
+        state.clear()
+        self.assertIsNone(state.last_new_session_time)
+
+
+class TestNewSessionCooldown(unittest.TestCase):
+    """Tests for new_session cooldown behavior."""
+
+    def test_first_try_new_session_clears(self) -> None:
+        """Verify first try_new_session() clears caches."""
+        from session_state import SessionState
+
+        state = SessionState()
+        state.track_file("/test/file.txt", 12345, "content")
+        state.mark_folder_provided("/test/folder")
+
+        result = state.try_new_session()
+
+        self.assertTrue(result)
+        self.assertEqual(len(state.mtimes), 0)
+        self.assertEqual(len(state.contents), 0)
+        self.assertEqual(len(state.provided_folders), 0)
+        self.assertIsNotNone(state.last_new_session_time)
+
+    def test_second_try_within_cooldown_is_suppressed(self) -> None:
+        """Verify second try_new_session() within cooldown is ignored."""
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()
+
+        # Add data after first clear
+        state.track_file("/test/file.txt", 12345, "content")
+
+        result = state.try_new_session()
+
+        self.assertFalse(result)
+        # Data should still be there (clear was suppressed)
+        self.assertIn("/test/file.txt", state.mtimes)
+
+    def test_try_after_cooldown_expires_clears(self) -> None:
+        """Verify try_new_session() clears after cooldown expires."""
+        import time
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()
+
+        # Manually set timer to the past (beyond cooldown)
+        state.last_new_session_time = time.monotonic() - 60
+
+        state.track_file("/test/file.txt", 12345, "content")
+
+        result = state.try_new_session()
+
+        self.assertTrue(result)
+        self.assertEqual(len(state.mtimes), 0)
+
+    def test_explicit_clear_then_try_new_session_works(self) -> None:
+        """Verify clear() resets cooldown so try_new_session() works again."""
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()
+
+        # Explicit clear resets timer
+        state.clear()
+
+        state.track_file("/test/file.txt", 12345, "content")
+
+        result = state.try_new_session()
+
+        self.assertTrue(result)
+        self.assertEqual(len(state.mtimes), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

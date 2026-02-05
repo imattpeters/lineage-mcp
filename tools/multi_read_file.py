@@ -34,7 +34,7 @@ async def multi_read_file(
     """
     # Handle new_session - clear all caches
     if new_session:
-        session.clear()
+        session.try_new_session()
 
     if not file_paths:
         return "Error: No file paths provided"
