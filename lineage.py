@@ -9,6 +9,7 @@ from typing import Dict, List
 
 from mcp.server.fastmcp import FastMCP
 
+from config import ENABLE_MULTI_EDIT, ENABLE_MULTI_READ
 from path_utils import init_base_dir_from_args
 from tools import (
     clear_cache,
@@ -185,74 +186,78 @@ async def edit(
     return await edit_file(file_path, old_string, new_string, replace_all, new_session)
 
 
-@mcp.tool()
-async def multi_edit(
-    edits: List[Dict],
-    new_session: bool = False,
-) -> str:
-    """Edit multiple files by replacing exact string matches in a single batch.
+if ENABLE_MULTI_EDIT:
 
-    Performs targeted string replacements across multiple files in one call.
-    Each edit specifies a file, old_string, and new_string. If one edit fails,
-    remaining edits still proceed.
+    @mcp.tool()
+    async def multi_edit(
+        edits: List[Dict],
+        new_session: bool = False,
+    ) -> str:
+        """Edit multiple files by replacing exact string matches in a single batch.
 
-    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-    call you made in this conversation (not a summary)?
-      → NO or UNSURE: new_session=True is REQUIRED
-      → YES, I see complete previous output: new_session=False is fine
+        Performs targeted string replacements across multiple files in one call.
+        Each edit specifies a file, old_string, and new_string. If one edit fails,
+        remaining edits still proceed.
 
-    Missing this = missing AGENTS.md instruction files. When in doubt, always
-    use new_session=True - it's safe.
+        🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
+        call you made in this conversation (not a summary)?
+           → NO or UNSURE: new_session=True is REQUIRED
+           → YES, I see complete previous output: new_session=False is fine
 
-    Args:
-        edits: List of edit operations. Each dict must contain:
-            - file_path (str): Path to the file relative to the base directory
-            - old_string (str): Exact text to find and replace
-            - new_string (str): Text to replace old_string with
-            - replace_all (bool, optional): If True, replace all occurrences.
-              Defaults to False.
-        new_session: Set True if you cannot see full output of a previous lineage
-                     call in this conversation. Clears server caches so instruction
-                     files are re-provided. Safe to use when uncertain.
+        Missing this = missing AGENTS.md instruction files. When in doubt, always
+        use new_session=True - it's safe.
 
-    Returns:
-        Combined results for all edits, with per-edit success/error messages.
-    """
-    return await multi_edit_file(edits, new_session)
+        Args:
+            edits: List of edit operations. Each dict must contain:
+                - file_path (str): Path to the file relative to the base directory
+                - old_string (str): Exact text to find and replace
+                - new_string (str): Text to replace old_string with
+                - replace_all (bool, optional): If True, replace all occurrences.
+                  Defaults to False.
+            new_session: Set True if you cannot see full output of a previous lineage
+                         call in this conversation. Clears server caches so instruction
+                         files are re-provided. Safe to use when uncertain.
+
+        Returns:
+            Combined results for all edits, with per-edit success/error messages.
+        """
+        return await multi_edit_file(edits, new_session)
 
 
-@mcp.tool()
-async def multi_read(
-    file_paths: List[str],
-    new_session: bool = False,
-    show_line_numbers: bool = False,
-) -> str:
-    """Read the contents of multiple files in a single call (max 5).
+if ENABLE_MULTI_READ:
 
-    Reads up to 5 files at once, returning their contents with clear separators.
-    Tracks all files for change detection and discovers instruction files.
+    @mcp.tool()
+    async def multi_read(
+        file_paths: List[str],
+        new_session: bool = False,
+        show_line_numbers: bool = False,
+    ) -> str:
+        """Read the contents of multiple files in a single call (max 5).
 
-    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-    call you made in this conversation (not a summary)?
-      → NO or UNSURE: new_session=True is REQUIRED
-      → YES, I see complete previous output: new_session=False is fine
+        Reads up to 5 files at once, returning their contents with clear separators.
+        Tracks all files for change detection and discovers instruction files.
 
-    Missing this = missing AGENTS.md instruction files. When in doubt, always
-    use new_session=True - it's safe.
+        🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
+        call you made in this conversation (not a summary)?
+           → NO or UNSURE: new_session=True is REQUIRED
+           → YES, I see complete previous output: new_session=False is fine
 
-    Args:
-        file_paths: List of file paths relative to the base directory (max 5).
-        new_session: Set True if you cannot see full output of a previous lineage
-                     call in this conversation. Clears server caches so instruction
-                     files are re-provided. Safe to use when uncertain.
-        show_line_numbers: If True, format output with line numbers (N→content).
-                          Defaults to False.
+        Missing this = missing AGENTS.md instruction files. When in doubt, always
+        use new_session=True - it's safe.
 
-    Returns:
-        Combined file contents with per-file headers, [CHANGED_FILES] and
-        [AGENTS.MD] sections appended at the end.
-    """
-    return await multi_read_file(file_paths, new_session, show_line_numbers)
+        Args:
+            file_paths: List of file paths relative to the base directory (max 5).
+            new_session: Set True if you cannot see full output of a previous lineage
+                         call in this conversation. Clears server caches so instruction
+                         files are re-provided. Safe to use when uncertain.
+            show_line_numbers: If True, format output with line numbers (N→content).
+                              Defaults to False.
+
+        Returns:
+            Combined file contents with per-file headers, [CHANGED_FILES] and
+            [AGENTS.MD] sections appended at the end.
+        """
+        return await multi_read_file(file_paths, new_session, show_line_numbers)
 
 
 @mcp.tool()
