@@ -32,7 +32,7 @@
             "command": [
                 "python",
                 "C:/git/lineage-mcp/lineage.py",
-                "C:/git/PartyEcho",
+                "C:/git/lineage-mcp",
             ],
             "enabled": true,
         }
