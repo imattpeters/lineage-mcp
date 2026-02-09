@@ -91,12 +91,20 @@ async def read(
     show_line_numbers: bool = False,
     offset: int | None = None,
     limit: int | None = None,
+    page: int | None = None,
 ) -> str:
     """Read the contents of a file.
 
     Tracks file modification time for change detection [on subsequent reads you
     will be notified of file changes to file you've read] and discovers AGENTS.md
     files from parent directories and appends them to the read.
+
+    Supports two pagination methods:
+    1. Line-based: Use offset and limit for specific line ranges
+    2. Character-based: Use page for automatic pagination (configurable limit)
+
+    When a file exceeds the character limit (default 50,000), it is automatically
+    paginated with line-aware truncation. Each page shows complete lines only.
 
     🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
     call you made in this conversation (not a summary)?
@@ -114,15 +122,25 @@ async def read(
         show_line_numbers: If True, format output with line numbers (N→content). Defaults to False.
         offset: Optional 0-based line number to start reading from. If None, starts at line 0.
                 If offset >= total lines, returns empty result.
+                Cannot be used with 'page' parameter.
         limit: Optional number of lines to read. If None, reads to end of file.
                If limit=0 or offset beyond EOF, returns empty result.
+               Cannot be used with 'page' parameter.
+        page: Optional page number for character-based pagination (0-indexed).
+              Automatically paginates files exceeding the character limit.
+              Each page contains complete lines only (line-aware truncation).
+              Use continuation messages to navigate to next pages.
+              Cannot be used with 'offset' or 'limit' parameters.
 
     Returns:
-        File contents (full or partial based on offset/limit) with optional line numbers,
-        [CHANGED_FILES] and [AGENTS.MD] sections appended. Returns empty result if offset
-        is beyond end of file.
+        File contents (full or partial) with optional line numbers.
+        For paginated reads: includes page indicator, character count,
+        line range, and continuation instructions.
+        [CHANGED_FILES] and [AGENTS.MD] sections appended as usual.
     """
-    return await read_file(file_path, new_session, show_line_numbers, offset, limit)
+    return await read_file(
+        file_path, new_session, show_line_numbers, offset, limit, page
+    )
 
 
 @mcp.tool()

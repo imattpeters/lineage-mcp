@@ -18,6 +18,9 @@ DEFAULT_NEW_SESSION_COOLDOWN_SECONDS: float = 30.0
 DEFAULT_ENABLE_MULTI_READ: bool = True
 DEFAULT_ENABLE_MULTI_EDIT: bool = True
 
+# Default character limit for pagination
+DEFAULT_READ_CHAR_LIMIT: int = 50000
+
 
 def load_instruction_file_names(config_dir: Path | None = None) -> List[str]:
     """Load instruction file names from appsettings.json.
@@ -140,7 +143,39 @@ def load_enable_multi_edit(config_dir: Path | None = None) -> bool:
     return DEFAULT_ENABLE_MULTI_EDIT
 
 
+def load_read_char_limit(config_dir: Path | None = None) -> int:
+    """Load read character limit from appsettings.json.
+
+    Controls the maximum characters returned per page when reading files.
+    Files exceeding this limit are automatically paginated with line-aware
+    truncation.
+
+    Args:
+        config_dir: Directory containing appsettings.json. If None, uses script directory.
+
+    Returns:
+        Character limit as integer. Defaults to 50000.
+    """
+    if config_dir is None:
+        config_dir = Path(__file__).parent
+
+    config_path = config_dir / "appsettings.json"
+
+    try:
+        if config_path.is_file():
+            with config_path.open("r", encoding="utf-8") as f:
+                config = json.load(f)
+                value = config.get("readCharLimit")
+                if isinstance(value, int) and value > 0:
+                    return value
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    return DEFAULT_READ_CHAR_LIMIT
+
+
 # Singleton: Load instruction file names at module import
 INSTRUCTION_FILE_NAMES: List[str] = load_instruction_file_names()
 ENABLE_MULTI_READ: bool = load_enable_multi_read()
 ENABLE_MULTI_EDIT: bool = load_enable_multi_edit()
+READ_CHAR_LIMIT: int = load_read_char_limit()

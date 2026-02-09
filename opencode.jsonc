@@ -1,0 +1,40 @@
+{
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "plugin": ["opencode-gemini-auth@latest"],
+    "tools": {
+        "read": false,
+        "edit": false,
+        "write": false,
+        "apply_patch": false,
+    },
+    "mcp": {
+        "sequential-thinking": {
+            "type": "local",
+            "command": [
+                "npx",
+                "-y",
+                "@modelcontextprotocol/server-sequential-thinking",
+            ],
+            "enabled": true,
+        },
+        "context7": {
+            "type": "local",
+            "command": ["npx", "-y", "@upstash/context7-mcp"],
+            "enabled": false,
+        },
+        "fetch": {
+            "type": "local",
+            "command": ["uvx", "mcp-server-fetch"],
+            "enabled": false,
+        },
+        "lineage": {
+            "type": "local",
+            "command": [
+                "python",
+                "C:/git/lineage-mcp/lineage.py",
+                "C:/git/PartyEcho",
+            ],
+            "enabled": true,
+        }
+    },
+}

@@ -1,5 +1,6 @@
 """Search files tool - glob pattern file search."""
 
+import asyncio
 from pathlib import Path
 
 from file_watcher import format_changed_files_section
@@ -33,15 +34,19 @@ async def search_files(pattern: str, path: str = "", new_session: bool = False) 
     if not search_dir.is_dir():
         return f"Error: Path is not a directory: {path}"
 
-    # Perform glob search
-    matches: list[Path] = []
-    for match in search_dir.glob(pattern):
-        # Security: ensure match is still within base directory
-        try:
-            match.resolve().relative_to(base_dir.resolve())
-            matches.append(match)
-        except ValueError:
-            continue
+    # Perform glob search in a thread pool to avoid blocking
+    def do_glob():
+        matches: list[Path] = []
+        for match in search_dir.glob(pattern):
+            # Security: ensure match is still within base directory
+            try:
+                match.resolve().relative_to(base_dir.resolve())
+                matches.append(match)
+            except ValueError:
+                continue
+        return matches
+
+    matches = await asyncio.to_thread(do_glob)
 
     if not matches:
         output = f"No files found matching pattern: {pattern}"
