@@ -1,11 +1,12 @@
-"""Tests for pagination functionality in read_file tool.
+"""Tests for cursor-based pagination in read_file tool.
 
-Tests the paginate_content helper and read_file integration with pagination.
+Tests the extract_content_by_cursor helper and read_file integration with cursor pagination.
 """
 
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 # Add parent directory to path for module imports
 _parent_dir = str(Path(__file__).parent.parent)
@@ -15,420 +16,309 @@ if _parent_dir not in sys.path:
 from tests.test_utils import TempWorkspace, run_async
 
 
-class TestPaginateContent(unittest.TestCase):
-    """Test the pagination logic with various scenarios."""
+class TestExtractContentByCursor(unittest.TestCase):
+    """Test the cursor-based content extraction logic."""
 
-    def test_empty_file(self):
-        """Empty file returns empty content."""
-        from tools.read_file import paginate_content
+    def test_empty_content(self):
+        """Empty content returns empty result."""
+        from tools.read_file import extract_content_by_cursor
 
-        content = ""
-        result = paginate_content(content, 0, 1000)
-        self.assertEqual(result, ("", 0, 0, 0, 1, True))
+        result = extract_content_by_cursor("", 0, 1000)
+        self.assertEqual(result, ("", 0, 0, 0, 0))
 
-    def test_single_page_file(self):
-        """File under limit returns full content."""
-        from tools.read_file import paginate_content
+    def test_full_content_within_budget(self):
+        """Content under budget returns everything."""
+        from tools.read_file import extract_content_by_cursor
 
         content = "Line 1\nLine 2\nLine 3\n"
-        result = paginate_content(content, 0, 1000)
-        self.assertEqual(result[0], content)
-        self.assertEqual(result[1], len(content))
-        self.assertEqual(result[2], 0)  # start_line
-        self.assertEqual(result[3], 3)  # end_line
-        self.assertEqual(result[4], 1)  # total_pages
-        self.assertTrue(result[5])  # is_last_page
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 0, 1000)
+        )
+        self.assertEqual(extracted, content)
+        self.assertEqual(next_cursor, len(content))
+        self.assertEqual(start_line, 0)
+        self.assertEqual(end_line, 3)
+        self.assertEqual(total_lines, 3)
 
-    def test_exact_line_boundary(self):
-        """Pagination stops exactly at line boundary."""
-        from tools.read_file import paginate_content
+    def test_cursor_at_start(self):
+        """Cursor at 0 starts from beginning."""
+        from tools.read_file import extract_content_by_cursor
 
-        # 5 lines of 100 chars each (including newline)
-        lines = ["A" * 99 + "\n" for _ in range(5)]
-        content = "".join(lines)
+        content = "AAAA\nBBBB\nCCCC\n"
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 0, 10)
+        )
+        # Budget 10, line 1 is 5 chars, line 2 is 5 chars = 10 total
+        self.assertEqual(extracted, "AAAA\nBBBB\n")
+        self.assertEqual(next_cursor, 10)
+        self.assertEqual(start_line, 0)
+        self.assertEqual(end_line, 2)
 
-        result = paginate_content(content, 0, 500)  # 500 chars = 5 lines
-        self.assertEqual(result[0], content)
-        self.assertEqual(result[3], 5)  # Should end after line 5
+    def test_cursor_mid_file(self):
+        """Cursor in the middle of the file resumes correctly."""
+        from tools.read_file import extract_content_by_cursor
+
+        content = "AAAA\nBBBB\nCCCC\n"
+        # Start from after line 2 (position 10)
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 10, 1000)
+        )
+        self.assertEqual(extracted, "CCCC\n")
+        self.assertEqual(next_cursor, 15)
+        self.assertEqual(start_line, 2)
+        self.assertEqual(end_line, 3)
+
+    def test_cursor_beyond_eof(self):
+        """Cursor past end of content returns empty."""
+        from tools.read_file import extract_content_by_cursor
+
+        content = "AAAA\nBBBB\n"
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 100, 1000)
+        )
+        self.assertEqual(extracted, "")
+        self.assertEqual(start_line, total_lines)
+        self.assertEqual(end_line, total_lines)
 
     def test_line_aware_truncation(self):
-        """Truncation happens at nearest line boundary before limit."""
-        from tools.read_file import paginate_content
+        """Truncation happens at line boundaries."""
+        from tools.read_file import extract_content_by_cursor
 
-        # Lines: 100, 200, 400, 100, 300 chars (including newlines)
-        lines = [
-            "A" * 99 + "\n",
-            "B" * 199 + "\n",
-            "C" * 399 + "\n",
-            "D" * 99 + "\n",
-            "E" * 299 + "\n",
-        ]
+        content = "Short\nThis is a much longer line\nTiny\n"
+        # Budget 15: "Short\n" = 6 chars, next line = 27 chars, would exceed
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 0, 15)
+        )
+        self.assertEqual(extracted, "Short\n")
+        self.assertEqual(next_cursor, 6)
+        self.assertEqual(end_line, 1)
+
+    def test_at_least_one_line(self):
+        """Always includes at least one line even if it exceeds budget."""
+        from tools.read_file import extract_content_by_cursor
+
+        content = "This is a very long line that exceeds the budget\nShort\n"
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 0, 5)
+        )
+        # Must include at least the first line even though it exceeds budget
+        self.assertEqual(extracted, "This is a very long line that exceeds the budget\n")
+        self.assertEqual(next_cursor, 49)
+        self.assertEqual(end_line, 1)
+
+    def test_no_trailing_newline(self):
+        """File without trailing newline is handled correctly."""
+        from tools.read_file import extract_content_by_cursor
+
+        content = "Line 1\nLine 2\nLine 3"
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 0, 1000)
+        )
+        self.assertEqual(extracted, content)
+        self.assertEqual(total_lines, 3)
+
+    def test_sequential_reads_cover_all_content(self):
+        """Sequential cursor reads cover the entire file without gaps."""
+        from tools.read_file import extract_content_by_cursor
+
+        lines = [f"Line {i:03d}: " + "X" * 90 + "\n" for i in range(20)]
         content = "".join(lines)
+        budget = 500  # ~5 lines per read
 
-        # Limit = 600
-        # Cumulative: 100, 300, 700, 800, 1100
-        # Should stop after line 2 (300 chars) because line 3 (700) exceeds 600
-        result = paginate_content(content, 0, 600)
-        self.assertEqual(result[1], 300)  # Actual chars returned
-        self.assertEqual(result[3], 2)  # End after line 2
+        all_extracted = []
+        cursor = 0
+        reads = 0
+        max_reads = 100
 
-    def test_multi_page_navigation(self):
-        """Navigate through multiple pages."""
-        from tools.read_file import paginate_content
+        while cursor < len(content) and reads < max_reads:
+            extracted, next_cursor, start_line, end_line, total_lines = (
+                extract_content_by_cursor(content, cursor, budget)
+            )
+            self.assertGreater(next_cursor, cursor, "Cursor must advance")
+            all_extracted.append(extracted)
+            cursor = next_cursor
+            reads += 1
 
-        # Create 10 lines of 100 chars each
-        lines = [f"Line {i:02d}" + "A" * 90 + "\n" for i in range(10)]
-        content = "".join(lines)
+        # All content should be covered
+        reassembled = "".join(all_extracted)
+        self.assertEqual(reassembled, content)
 
-        char_limit = 250  # Should fit ~2.5 lines, truncates to 2 lines
+    def test_with_line_numbers(self):
+        """Line numbers are included and budget-accounted."""
+        from tools.read_file import extract_content_by_cursor
 
-        # Page 0: Lines 0-2 (200 chars)
-        r0 = paginate_content(content, 0, char_limit)
-        self.assertEqual(r0[2], 0)
-        self.assertEqual(r0[3], 2)
+        content = "AAAA\nBBBB\nCCCC\n"
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 0, 1000, show_line_numbers=True)
+        )
+        self.assertIn("1→AAAA", extracted)
+        self.assertIn("2→BBBB", extracted)
+        self.assertIn("3→CCCC", extracted)
 
-        # Page 1: Lines 2-4 (200 chars)
-        r1 = paginate_content(content, 1, char_limit)
-        self.assertEqual(r1[2], 2)
-        # The end_line can be 4 or 5 depending on line boundary alignment
-        self.assertTrue(r1[3] == 4 or r1[3] == 5)
+    def test_line_numbers_affect_budget(self):
+        """Line number prefixes are counted against the budget."""
+        from tools.read_file import extract_content_by_cursor
 
-        # Page 2: Lines 4-6 (200 chars)
-        r2 = paginate_content(content, 2, char_limit)
-        self.assertEqual(r2[2], 4)
+        # Each line with prefix: "1→AAAA" = 6 chars, "2→BBBB" = 6 chars + 1 newline each = 7
+        content = "AAAA\nBBBB\nCCCC\n"
+        # Budget of 8 should fit "1→AAAA\n" (7 chars) but not "2→BBBB\n" (7 more)
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 0, 8, show_line_numbers=True)
+        )
+        self.assertIn("1→AAAA", extracted)
+        self.assertNotIn("2→BBBB", extracted)
+        self.assertEqual(end_line, 1)
+        # Cursor advances by the RAW line length (5 chars for "AAAA\n")
+        self.assertEqual(next_cursor, 5)
 
-        # Page 3: Lines 6-8 (200 chars)
-        r3 = paginate_content(content, 3, char_limit)
-        self.assertEqual(r3[2], 6)
+    def test_line_numbers_resume_correctly(self):
+        """Line numbers are correct when resuming from a cursor."""
+        from tools.read_file import extract_content_by_cursor
 
-        # Page 4: Lines 8-10 (200 chars)
-        r4 = paginate_content(content, 4, char_limit)
-        self.assertEqual(r4[2], 8)
-        self.assertTrue(r4[5])  # Last page
-
-    def test_page_six_scenario(self):
-        """Test requesting page 6 in a multi-page file.
-
-        Setup: 30 lines of 200 chars each = 6000 chars total
-        Limit: 1000 chars per page
-        Expected: 6 pages total (Pages 0-5)
-        Page 6 should return empty with EOF indication.
-        """
-        from tools.read_file import paginate_content
-
-        lines = [f"PageTest Line {i:02d}" + "X" * 180 + "\n" for i in range(30)]
-        content = "".join(lines)
-        char_limit = 1000
-
-        # Verify each valid page
-        for page_num in range(6):
-            result = paginate_content(content, page_num, char_limit)
-            self.assertEqual(result[4], 6, f"Page {page_num}: wrong total_pages")
-            is_last = page_num == 5
-            self.assertEqual(result[5], is_last, f"Page {page_num}: wrong is_last_page")
-
-        # Now test page 6 (beyond content)
-        r6 = paginate_content(content, 6, char_limit)
-        self.assertEqual(r6[0], "")  # Empty content
-        self.assertEqual(r6[1], 0)  # Zero chars
-        self.assertEqual(r6[2], 30)  # Start at end
-        self.assertEqual(r6[3], 30)  # End at end
-        self.assertEqual(r6[4], 6)  # Still 6 pages total
-        self.assertTrue(r6[5])  # Considered last page
-
-    def test_uneven_line_lengths(self):
-        """Handle files with irregular line lengths."""
-        from tools.read_file import paginate_content
-
-        # Varying line lengths
-        lines = [
-            "Short\n",  # 6 chars
-            "Medium line here\n",  # 18 chars
-            "This is a much longer line indeed\n",  # 36 chars
-            "Tiny\n",  # 5 chars
-            "Another substantial line content\n",  # 35 chars
-        ]
-        content = "".join(lines)
-        # Total: 100 chars
-
-        # Limit = 50
-        # Cumulative: 6, 24, 60, 65, 100
-        # Should stop after line 2 (24 chars) because line 3 (60) exceeds 50
-        result = paginate_content(content, 0, 50)
-        # Allow for 23-24 chars depending on exact boundary calculation
-        self.assertTrue(result[1] == 23 or result[1] == 24)
-        self.assertEqual(result[3], 2)
-
-    def test_long_line_exceeds_limit(self):
-        """Handle single line exceeding character limit."""
-        from tools.read_file import paginate_content
-
-        content = "A" * 10000 + "\n"  # One long line
-
-        result = paginate_content(content, 0, 1000)
-        self.assertEqual(len(result[0]), 1000)
-        # For a single line, if we've consumed it all, it might be marked as last
-        # Check that we can get more content on next page
-        result2 = paginate_content(content, 1, 1000)
-        self.assertEqual(len(result2[0]), 1000)
-
-    def test_no_newline_at_end(self):
-        """Handle file without trailing newline."""
-        from tools.read_file import paginate_content
-
-        content = "Line 1\nLine 2\nLine 3"  # No final newline
-
-        result = paginate_content(content, 0, 1000)
-        self.assertEqual(result[0], content)
-        self.assertEqual(result[3], 3)  # Still 3 lines
+        content = "AAAA\nBBBB\nCCCC\n"
+        # Start from line 2 (cursor=5, after "AAAA\n")
+        extracted, next_cursor, start_line, end_line, total_lines = (
+            extract_content_by_cursor(content, 5, 1000, show_line_numbers=True)
+        )
+        self.assertIn("2→BBBB", extracted)
+        self.assertIn("3→CCCC", extracted)
+        self.assertNotIn("1→", extracted)
 
 
-class TestReadFilePagination(unittest.TestCase):
-    """Integration tests for read_file with pagination."""
+class TestReadFileCursorPagination(unittest.TestCase):
+    """Integration tests for read_file with cursor-based pagination."""
 
-    def test_auto_pagination_first_page(self):
-        """Reading large file returns first page automatically."""
+    def _patch_limit(self, limit_value):
+        """Return a context manager that patches READ_CHAR_LIMIT in the read_file module."""
+        return patch("tools.read_file.READ_CHAR_LIMIT", limit_value)
+
+    def test_auto_pagination_large_file(self):
+        """Large file auto-paginates and includes cursor in continuation."""
         with TempWorkspace() as ws:
             from session_state import session
             from tools.read_file import read_file
-            from tools import READ_CHAR_LIMIT
 
             session.clear()
 
             # Create a multi-page test file
-            # 20 lines of 500 chars = 10,000 chars total
             lines = [f"Line {i:02d}: " + "X" * 490 + "\n" for i in range(20)]
             ws.create_file("large.txt", "".join(lines))
 
-            # Mock READ_CHAR_LIMIT
-            import tools
-
-            original_limit = tools.READ_CHAR_LIMIT
-            tools.READ_CHAR_LIMIT = 2000
-
-            try:
+            with self._patch_limit(2000):
                 result = run_async(read_file("large.txt"))
 
-                self.assertIn("[Page 1 of", result)
-                self.assertIn("chars]", result)
+                self.assertIn("chars 0-", result)
+                self.assertIn("reads remaining", result)
+                self.assertIn("cursor=", result)
                 self.assertIn("To continue reading", result)
-            finally:
-                import tools
 
-                tools.READ_CHAR_LIMIT = original_limit
-                session.clear()
+            session.clear()
 
-            # Create a multi-page test file
-            # 20 lines of 500 chars = 10,000 chars total
-            lines = [f"Line {i:02d}: " + "X" * 490 + "\n" for i in range(20)]
-            ws.create_file("large.txt", "".join(lines))
+    def test_explicit_cursor_request(self):
+        """Explicit cursor continues from correct position."""
+        import re
 
-            # Mock READ_CHAR_LIMIT directly in the read_file module
-            import tools.read_file
-
-            original_limit = tools.read_file.READ_CHAR_LIMIT
-            tools.read_file.READ_CHAR_LIMIT = 2000
-
-            try:
-                result = run_async(read_file("large.txt"))
-
-                self.assertIn("[Page 1 of", result)
-                self.assertIn("chars]", result)
-                self.assertIn("To continue reading", result)
-            finally:
-                import tools.read_file
-
-                tools.read_file.READ_CHAR_LIMIT = original_limit
-                session.clear()
-
-    def test_explicit_page_request(self):
-        """Request specific page returns correct content."""
         with TempWorkspace() as ws:
             from session_state import session
             from tools.read_file import read_file
 
             session.clear()
 
-            # Create a multi-page test file
             lines = [f"Line {i:02d}: " + "X" * 490 + "\n" for i in range(20)]
             ws.create_file("large.txt", "".join(lines))
 
-            # Mock READ_CHAR_LIMIT directly in the read_file module
-            import tools.read_file
+            with self._patch_limit(2000):
+                # First read to get cursor
+                result1 = run_async(read_file("large.txt"))
+                self.assertIn("cursor=", result1)
 
-            original_limit = tools.read_file.READ_CHAR_LIMIT
-            tools.read_file.READ_CHAR_LIMIT = 2000
+                # Extract cursor value from result
+                cursor_match = re.search(r'cursor=(\d+)', result1)
+                self.assertIsNotNone(cursor_match)
+                cursor_value = int(cursor_match.group(1))
 
-            try:
-                result = run_async(read_file("large.txt", page=2))
+                # Second read with cursor
+                result2 = run_async(read_file("large.txt", cursor=cursor_value))
+                self.assertIn(f"chars {cursor_value}-", result2)
+                self.assertIn("File: large.txt", result2)
 
-                self.assertIn("[Page 3 of", result)
-                self.assertIn("File: large.txt", result)
-            finally:
-                tools.read_file.READ_CHAR_LIMIT = original_limit
-                session.clear()
+            session.clear()
 
-    def test_page_beyond_eof(self):
-        """Requesting page beyond content returns appropriate message."""
+    def test_cursor_beyond_eof(self):
+        """Cursor beyond file content returns EOF message."""
         with TempWorkspace() as ws:
             from session_state import session
             from tools.read_file import read_file
 
             session.clear()
 
-            # Create a multi-page test file
-            lines = [f"Line {i:02d}: " + "X" * 490 + "\n" for i in range(20)]
-            ws.create_file("large.txt", "".join(lines))
+            ws.create_file("test.txt", "Hello\n")
 
-            # Mock READ_CHAR_LIMIT directly in the read_file module
-            import tools.read_file
-
-            original_limit = tools.read_file.READ_CHAR_LIMIT
-            tools.read_file.READ_CHAR_LIMIT = 2000
-
-            try:
-                result = run_async(read_file("large.txt", page=10))
-
-                self.assertTrue(
-                    "End of file" in result or "End of file reached" in result
-                )
-            finally:
-                tools.read_file.READ_CHAR_LIMIT = original_limit
-                session.clear()
-
-    def test_explicit_page_request(self):
-        """Request specific page returns correct content."""
-        with TempWorkspace() as ws:
-            from session_state import session
-            from tools.read_file import read_file
-            import tools.read_file as rf_module
-
+            result = run_async(read_file("test.txt", cursor=99999))
+            self.assertIn("End of file reached", result)
             session.clear()
 
-            # Create a multi-page test file
-            lines = [f"Line {i:02d}: " + "X" * 490 + "\n" for i in range(20)]
-            ws.create_file("large.txt", "".join(lines))
-
-            # Mock READ_CHAR_LIMIT directly in the read_file module
-            original_limit = rf_module.READ_CHAR_LIMIT
-            rf_module.READ_CHAR_LIMIT = 2000
-
-            try:
-                result = run_async(read_file("large.txt", page=2))
-
-                self.assertIn("[Page 3 of", result)
-                self.assertIn("File: large.txt", result)
-            finally:
-                rf_module.READ_CHAR_LIMIT = original_limit
-                session.clear()
-
-    def test_page_beyond_eof(self):
-        """Requesting page beyond content returns appropriate message."""
-        with TempWorkspace() as ws:
-            from session_state import session
-            from tools.read_file import read_file
-            import tools.read_file as rf_module
-
-            session.clear()
-
-            # Create a multi-page test file
-            lines = [f"Line {i:02d}: " + "X" * 490 + "\n" for i in range(20)]
-            ws.create_file("large.txt", "".join(lines))
-
-            # Mock READ_CHAR_LIMIT directly in the read_file module
-            original_limit = rf_module.READ_CHAR_LIMIT
-            rf_module.READ_CHAR_LIMIT = 2000
-
-            try:
-                result = run_async(read_file("large.txt", page=10))
-
-                self.assertTrue(
-                    "End of file" in result or "End of file reached" in result
-                )
-            finally:
-                rf_module.READ_CHAR_LIMIT = original_limit
-                session.clear()
-
-    def test_page_with_offset_error(self):
-        """Using page with offset returns error."""
+    def test_cursor_with_offset_error(self):
+        """Using cursor with offset returns error."""
         with TempWorkspace() as ws:
             from session_state import session
             from tools.read_file import read_file
 
             session.clear()
-
-            # Create a test file
             ws.create_file("test.txt", "some content\n" * 10)
 
-            result = run_async(read_file("test.txt", page=0, offset=5))
-
+            result = run_async(read_file("test.txt", cursor=0, offset=5))
             self.assertIn("Error", result)
-            self.assertIn("Cannot use 'page' with 'offset'", result)
+            self.assertIn("Cannot use 'cursor' with 'offset'", result)
             session.clear()
 
-    def test_page_with_limit_error(self):
-        """Using page with limit returns error."""
+    def test_cursor_with_limit_error(self):
+        """Using cursor with limit returns error."""
         with TempWorkspace() as ws:
             from session_state import session
             from tools.read_file import read_file
 
             session.clear()
-
-            # Create a test file
             ws.create_file("test.txt", "some content\n" * 10)
 
-            result = run_async(read_file("test.txt", page=0, limit=10))
-
+            result = run_async(read_file("test.txt", cursor=0, limit=10))
             self.assertIn("Error", result)
-            self.assertIn("Cannot use 'page' with 'offset'", result)
+            self.assertIn("Cannot use 'cursor' with 'offset'", result)
             session.clear()
 
-    def test_negative_page_error(self):
-        """Negative page number returns error."""
+    def test_negative_cursor_error(self):
+        """Negative cursor returns error."""
         with TempWorkspace() as ws:
             from session_state import session
             from tools.read_file import read_file
 
             session.clear()
-
-            # Create a test file
             ws.create_file("test.txt", "some content\n" * 10)
 
-            result = run_async(read_file("test.txt", page=-1))
-
+            result = run_async(read_file("test.txt", cursor=-1))
             self.assertIn("Error", result)
             self.assertIn("must be non-negative", result)
             session.clear()
 
-    def test_pagination_with_line_numbers(self):
-        """Pagination works correctly with show_line_numbers."""
+    def test_cursor_with_line_numbers(self):
+        """Cursor pagination works with show_line_numbers."""
         with TempWorkspace() as ws:
             from session_state import session
             from tools.read_file import read_file
 
             session.clear()
 
-            # Create a multi-page test file
             lines = [f"Line {i:02d}: " + "X" * 490 + "\n" for i in range(20)]
             ws.create_file("large.txt", "".join(lines))
 
-            # Mock READ_CHAR_LIMIT directly in the read_file module
-            import tools.read_file
-
-            original_limit = tools.read_file.READ_CHAR_LIMIT
-            tools.read_file.READ_CHAR_LIMIT = 2000
-
-            try:
+            with self._patch_limit(2000):
                 result = run_async(
-                    read_file("large.txt", page=1, show_line_numbers=True)
+                    read_file("large.txt", cursor=0, show_line_numbers=True)
                 )
-
-                # Should have pagination header with line numbers
-                self.assertIn("[Page 2 of", result)
                 self.assertIn("→", result)  # Line number separator
-            finally:
-                tools.read_file.READ_CHAR_LIMIT = original_limit
-                session.clear()
+                self.assertIn("cursor=", result)
+
+            session.clear()
 
     def test_small_file_no_pagination(self):
         """Small files under limit return full content without pagination."""
@@ -438,23 +328,126 @@ class TestReadFilePagination(unittest.TestCase):
 
             session.clear()
 
-            # Create a small file
             ws.create_file("small.txt", "Small content\n")
 
-            # Mock READ_CHAR_LIMIT to large value
-            import tools.read_file
-
-            original_limit = tools.read_file.READ_CHAR_LIMIT
-            tools.read_file.READ_CHAR_LIMIT = 50000
-
-            try:
+            with self._patch_limit(50000):
                 result = run_async(read_file("small.txt"))
-
-                self.assertNotIn("[Page", result)  # No pagination header
+                self.assertNotIn("cursor=", result)  # No pagination
                 self.assertIn("Small content", result)
-            finally:
-                tools.read_file.READ_CHAR_LIMIT = original_limit
-                session.clear()
+
+            session.clear()
+
+    def test_sequential_reads_cover_full_file(self):
+        """Sequential cursor-based reads cover the entire file content."""
+        import re
+
+        with TempWorkspace() as ws:
+            from session_state import session
+            from tools.read_file import read_file
+
+            session.clear()
+
+            lines = [f"Line {i:03d}: " + "Y" * 90 + "\n" for i in range(50)]
+            ws.create_file("big.txt", "".join(lines))
+
+            with self._patch_limit(2000):
+                collected_lines = []
+                cursor = None
+                max_iterations = 100
+                iterations = 0
+
+                while iterations < max_iterations:
+                    if cursor is None:
+                        result = run_async(read_file("big.txt"))
+                    else:
+                        result = run_async(read_file("big.txt", cursor=cursor))
+
+                    # Collect actual file lines from result (skip headers/footers)
+                    for line in result.split("\n"):
+                        if line.startswith("Line ") and "Y" in line:
+                            collected_lines.append(line + "\n")
+
+                    # Check for continuation
+                    cursor_match = re.search(r'cursor=(\d+)', result)
+                    if cursor_match:
+                        cursor = int(cursor_match.group(1))
+                    else:
+                        break
+                    iterations += 1
+
+                # All lines should be present
+                self.assertEqual(len(collected_lines), 50)
+                # Check first and last
+                self.assertTrue(collected_lines[0].startswith("Line 000:"))
+                self.assertTrue(collected_lines[49].startswith("Line 049:"))
+
+            session.clear()
+
+    def test_overhead_included_in_budget(self):
+        """Instruction files are included and accounted for in the budget."""
+        with TempWorkspace() as ws:
+            from session_state import session
+            from tools.read_file import read_file
+
+            session.clear()
+
+            # Create a subdirectory with an AGENTS.md
+            ws.create_dir("src")
+            agents_content = "# Agent Instructions\n" + "Important info. " * 100
+            ws.create_file("src/AGENTS.md", agents_content)
+
+            # Create a large file in that directory
+            lines = [f"Line {i:03d}: " + "Z" * 90 + "\n" for i in range(50)]
+            ws.create_file("src/big.py", "".join(lines))
+
+            with self._patch_limit(3000):
+                result = run_async(read_file("src/big.py"))
+
+                # Should include AGENTS.md content
+                self.assertIn("Agent Instructions", result)
+                # Should still have cursor pagination
+                self.assertIn("cursor=", result)
+                # The instruction content should be there
+                self.assertIn("Important info", result)
+
+                # Total output should be reasonable relative to limit
+                # (may exceed slightly due to at-least-one-line guarantee)
+                # but should not be wildly over
+                self.assertLess(len(result), 3000 * 2)
+
+            session.clear()
+
+    def test_eof_reached_message(self):
+        """Last read shows end of file message."""
+        import re
+
+        with TempWorkspace() as ws:
+            from session_state import session
+            from tools.read_file import read_file
+
+            session.clear()
+
+            lines = [f"Line {i:02d}\n" for i in range(10)]
+            ws.create_file("small_paged.txt", "".join(lines))
+
+            with self._patch_limit(30):
+                cursor = None
+                last_result = ""
+                for _ in range(100):
+                    if cursor is None:
+                        result = run_async(read_file("small_paged.txt"))
+                    else:
+                        result = run_async(read_file("small_paged.txt", cursor=cursor))
+
+                    last_result = result
+                    cursor_match = re.search(r'cursor=(\d+)', result)
+                    if not cursor_match:
+                        break
+                    cursor = int(cursor_match.group(1))
+
+                self.assertIn("End of file reached", last_result)
+
+            session.clear()
 
 
 class TestConfigLoader(unittest.TestCase):

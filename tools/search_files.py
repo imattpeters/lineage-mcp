@@ -30,9 +30,9 @@ async def search_files(pattern: str, path: str = "", new_session: bool = False) 
 
     search_dir = result.path
     if not search_dir.exists():
-        return f"Error: Directory not found: {path or '.'}"
+        return f"Error: Directory not found: {path or '.'} (base directory: {get_base_dir()})"
     if not search_dir.is_dir():
-        return f"Error: Path is not a directory: {path}"
+        return f"Error: Path is not a directory: {path} (base directory: {get_base_dir()})"
 
     # Perform glob search in a thread pool to avoid blocking
     def do_glob():

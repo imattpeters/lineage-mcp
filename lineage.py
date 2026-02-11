@@ -91,7 +91,7 @@ async def read(
     show_line_numbers: bool = False,
     offset: int | None = None,
     limit: int | None = None,
-    page: int | None = None,
+    cursor: int | None = None,
 ) -> str:
     """Read the contents of a file.
 
@@ -101,10 +101,10 @@ async def read(
 
     Supports two pagination methods:
     1. Line-based: Use offset and limit for specific line ranges
-    2. Character-based: Use page for automatic pagination (configurable limit)
+    2. Character-based: Use cursor for automatic pagination with overhead-aware budgeting
 
     When a file exceeds the character limit (default 50,000), it is automatically
-    paginated with line-aware truncation. Each page shows complete lines only.
+    paginated. Each read returns complete lines and a cursor value for the next call.
 
     🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
     call you made in this conversation (not a summary)?
@@ -122,24 +122,23 @@ async def read(
         show_line_numbers: If True, format output with line numbers (N→content). Defaults to False.
         offset: Optional 0-based line number to start reading from. If None, starts at line 0.
                 If offset >= total lines, returns empty result.
-                Cannot be used with 'page' parameter.
+                Cannot be used with 'cursor' parameter.
         limit: Optional number of lines to read. If None, reads to end of file.
                If limit=0 or offset beyond EOF, returns empty result.
-               Cannot be used with 'page' parameter.
-        page: Optional page number for character-based pagination (0-indexed).
-              Automatically paginates files exceeding the character limit.
-              Each page contains complete lines only (line-aware truncation).
-              Use continuation messages to navigate to next pages.
-              Cannot be used with 'offset' or 'limit' parameters.
+               Cannot be used with 'cursor' parameter.
+        cursor: Optional character offset for cursor-based pagination.
+                Use the cursor value from a previous response to continue reading.
+                The response includes the exact cursor value to pass for the next read.
+                Cannot be used with 'offset' or 'limit' parameters.
 
     Returns:
         File contents (full or partial) with optional line numbers.
-        For paginated reads: includes page indicator, character count,
-        line range, and continuation instructions.
+        For paginated reads: includes progress info, line range, reads remaining,
+        and continuation instructions with the next cursor value.
         [CHANGED_FILES] and [AGENTS.MD] sections appended as usual.
     """
     return await read_file(
-        file_path, new_session, show_line_numbers, offset, limit, page
+        file_path, new_session, show_line_numbers, offset, limit, cursor
     )
 
 

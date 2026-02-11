@@ -89,7 +89,7 @@ def resolve_path(relative_path: str) -> PathResult:
         # Security check: ensure path is within base directory
         # Use os.path for compatibility with startswith check
         if not str(target).startswith(str(_base_dir)):
-            return PathResult.err("Error: Cannot access files outside of the base directory.")
+            return PathResult.err(f"Error: Cannot access files outside of the base directory. (base directory: {_base_dir})")
 
         return PathResult.ok(target)
     except (OSError, ValueError) as e:

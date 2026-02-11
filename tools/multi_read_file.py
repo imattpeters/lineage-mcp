@@ -6,7 +6,7 @@ from instruction_files import (
     include_instruction_file_content,
     mark_instruction_folder_if_applicable,
 )
-from path_utils import get_file_mtime_ms, resolve_path
+from path_utils import get_base_dir, get_file_mtime_ms, resolve_path
 from session_state import session
 
 MAX_FILES = 5
@@ -55,10 +55,10 @@ async def multi_read_file(
 
         full_path = result.path
         if not full_path.exists():
-            sections.append(f"{header}\nError: File not found: {file_path}")
+            sections.append(f"{header}\nError: File not found: {file_path} (base directory: {get_base_dir()})")
             continue
         if not full_path.is_file():
-            sections.append(f"{header}\nError: Path is not a file: {file_path}")
+            sections.append(f"{header}\nError: Path is not a file: {file_path} (base directory: {get_base_dir()})")
             continue
 
         # Read file content

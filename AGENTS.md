@@ -164,7 +164,7 @@ Config via `appsettings.json`:
 | Tool                                                                | Returns                                        |
 | ------------------------------------------------------------------- | ---------------------------------------------- |
 | `list(path, new_session)`                                           | Markdown table + [CHANGED_FILES]               |
-| `read(file_path, new_session, show_line_numbers, offset, limit)`    | Content + [CHANGED_FILES] + [INSTRUCTION_FILE] |
+| `read(file_path, new_session, show_line_numbers, offset, limit, cursor)` | Content + [CHANGED_FILES] + [INSTRUCTION_FILE] |
 | `write(file_path, content, new_session)`                            | Success/error                                  |
 | `edit(file_path, old_string, new_string, replace_all, new_session)` | Success/error                                  |
 | `multi_edit(edits, new_session)`                                    | Per-edit success/error + [CHANGED_FILES]       |
@@ -179,6 +179,9 @@ Config via `appsettings.json`:
 read("huge.csv", offset=0, limit=100)       # Lines 1-100
 read("huge.csv", offset=100, limit=100)     # Lines 101-200
 read("huge.csv", show_line_numbers=True)    # 101→content...
+# Cursor-based pagination (auto-triggers for large files):
+read("huge.csv")                            # Returns first chunk + cursor value
+read("huge.csv", cursor=44500)              # Continue from cursor position
 ```
 
 ### Edit Pattern

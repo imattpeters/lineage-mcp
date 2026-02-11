@@ -28,9 +28,9 @@ async def list_files(path: str = "", new_session: bool = False) -> str:
 
     full_path = result.path
     if not full_path.exists():
-        return f"Error: Directory not found: {path or '.'}"
+        return f"Error: Directory not found: {path or '.'} (base directory: {get_base_dir()})"
     if not full_path.is_dir():
-        return f"Error: Path is not a directory: {path}"
+        return f"Error: Path is not a directory: {path} (base directory: {get_base_dir()})"
 
     # Build file listing
     entries = sorted(full_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))

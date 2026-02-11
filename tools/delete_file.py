@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from file_watcher import format_changed_files_section
-from path_utils import resolve_path
+from path_utils import get_base_dir, resolve_path
 from session_state import session
 
 
@@ -27,7 +27,7 @@ async def delete_file(file_path: str, new_session: bool = False) -> str:
 
     full_path = result.path
     if not full_path.exists():
-        return f"Error: File not found: {file_path}"
+        return f"Error: File not found: {file_path} (base directory: {get_base_dir()})"
 
     try:
         file_path_str = str(full_path)

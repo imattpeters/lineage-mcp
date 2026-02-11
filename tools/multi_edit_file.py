@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any
 
 from file_watcher import format_changed_files_section
-from path_utils import get_file_mtime_ms, resolve_path
+from path_utils import get_base_dir, get_file_mtime_ms, resolve_path
 from session_state import session
 
 
@@ -64,10 +64,10 @@ async def multi_edit_file(
 
         full_path = path_result.path
         if not full_path.exists():
-            results.append(f"Edit {i} ({file_path}): Error: File not found")
+            results.append(f"Edit {i} ({file_path}): Error: File not found (base directory: {get_base_dir()})")
             continue
         if not full_path.is_file():
-            results.append(f"Edit {i} ({file_path}): Error: Path is not a file")
+            results.append(f"Edit {i} ({file_path}): Error: Path is not a file (base directory: {get_base_dir()})")
             continue
 
         # Read file content

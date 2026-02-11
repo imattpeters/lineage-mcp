@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from file_watcher import format_changed_files_section
-from path_utils import get_file_mtime_ms, resolve_path
+from path_utils import get_base_dir, get_file_mtime_ms, resolve_path
 from session_state import session
 
 
@@ -36,9 +36,9 @@ async def edit_file(
 
     full_path = result.path
     if not full_path.exists():
-        return f"Error: File not found: {file_path}"
+        return f"Error: File not found: {file_path} (base directory: {get_base_dir()})"
     if not full_path.is_file():
-        return f"Error: Path is not a file: {file_path}"
+        return f"Error: Path is not a file: {file_path} (base directory: {get_base_dir()})"
 
     try:
         content = full_path.read_text(encoding="utf-8")

@@ -88,7 +88,7 @@ def include_instruction_file_content(instruction_files: List[tuple[Path, Path]])
             content = file_path.read_text(encoding="utf-8")
 
             # Format the response section
-            output.append(f"\n[{file_path.name} from {folder_str}]")
+            output.append(f"\n[Appending {file_path}]")
             output.append(content)
 
             # Mark folder as provided
@@ -96,7 +96,7 @@ def include_instruction_file_content(instruction_files: List[tuple[Path, Path]])
 
         except (OSError, UnicodeDecodeError):
             # File is corrupted or unreadable
-            output.append(f"\n[{file_path.name} from {folder_str}]")
+            output.append(f"\n[Appending {file_path}]")
             output.append("[File Corrupted]")
             session.mark_folder_provided(folder_str)
 
