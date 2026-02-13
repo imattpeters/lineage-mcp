@@ -37,6 +37,9 @@ class PathResult:
 # Global base directory - set at startup
 _base_dir: Path = Path("/data")
 
+# Global allow full paths flag - set from config
+_allow_full_paths: bool = False
+
 
 def get_base_dir() -> Path:
     """Get the current base directory.
@@ -57,6 +60,25 @@ def set_base_dir(path: Union[str, Path]) -> None:
     _base_dir = Path(path).resolve()
 
 
+def set_allow_full_paths(allow: bool) -> None:
+    """Set whether full paths outside the base directory are allowed.
+
+    Args:
+        allow: If True, any absolute path on the system can be accessed.
+    """
+    global _allow_full_paths
+    _allow_full_paths = allow
+
+
+def get_allow_full_paths() -> bool:
+    """Get whether full paths outside the base directory are allowed.
+
+    Returns:
+        True if full paths are allowed, False if restricted to base directory.
+    """
+    return _allow_full_paths
+
+
 def init_base_dir_from_args() -> Path:
     """Initialize base directory from command line arguments.
 
@@ -74,10 +96,14 @@ def resolve_path(relative_path: str) -> PathResult:
     """Resolve a relative path to absolute, validating security.
 
     Ensures the resolved path stays within the base directory to prevent
-    directory traversal attacks.
+    directory traversal attacks, unless allowFullPaths is enabled.
+
+    When allowFullPaths is enabled, absolute paths anywhere on the system
+    are accepted. Relative paths are still resolved against the base directory.
 
     Args:
-        relative_path: Path relative to the base directory.
+        relative_path: Path relative to the base directory, or an absolute
+                       path when allowFullPaths is enabled.
 
     Returns:
         PathResult with either the resolved path or an error message.
@@ -87,9 +113,10 @@ def resolve_path(relative_path: str) -> PathResult:
         target = (_base_dir / relative_path).resolve()
 
         # Security check: ensure path is within base directory
-        # Use os.path for compatibility with startswith check
-        if not str(target).startswith(str(_base_dir)):
-            return PathResult.err(f"Error: Cannot access files outside of the base directory. (base directory: {_base_dir})")
+        # Skip if allowFullPaths is enabled
+        if not _allow_full_paths:
+            if not str(target).startswith(str(_base_dir)):
+                return PathResult.err(f"Error: Cannot access files outside of the base directory. (base directory: {_base_dir})")
 
         return PathResult.ok(target)
     except (OSError, ValueError) as e:

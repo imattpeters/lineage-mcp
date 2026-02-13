@@ -276,6 +276,18 @@ Update the `appsettings.json` to customize instruction file names and priority:
 
 Files are checked in priority order - first match per folder is used.
 
+### Allow Full Paths
+
+By default, all file operations are restricted to the base directory. To allow access to any path on the system (e.g., for cross-project references), set `allowFullPaths` to `true`:
+
+```json
+{
+  "allowFullPaths": true
+}
+```
+
+When enabled, absolute paths like `/var/log/app.log` or `C:\other\project\file.txt` are accepted. Relative paths still resolve against the base directory.
+
 ## Session Management
 
 LLM systems periodically "compact" or summarize conversation history to stay within context limits. When this happens, the detailed content from instruction files (AGENTS.md, CLAUDE.md, etc.) gets compressed or lost. The server's cache still thinks these files were "already provided" and won't re-send them.

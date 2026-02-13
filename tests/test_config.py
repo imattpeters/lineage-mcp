@@ -296,5 +296,69 @@ class TestDebugClientInfo(unittest.TestCase):
             self.assertFalse(result)
 
 
+class TestAllowFullPaths(unittest.TestCase):
+    """Tests for the allowFullPaths setting."""
+
+    def test_load_allow_full_paths_default(self) -> None:
+        """Default is False when no config file."""
+        with TempWorkspace() as ws:
+            from config import load_allow_full_paths
+
+            result = load_allow_full_paths(ws.path)
+
+            self.assertFalse(result)
+
+    def test_load_allow_full_paths_true(self) -> None:
+        """Returns True when set in config."""
+        with TempWorkspace() as ws:
+            from config import load_allow_full_paths
+
+            config = {"allowFullPaths": True}
+            config_path = ws.path / "appsettings.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+
+            result = load_allow_full_paths(ws.path)
+
+            self.assertTrue(result)
+
+    def test_load_allow_full_paths_false(self) -> None:
+        """Returns False when explicitly set to false."""
+        with TempWorkspace() as ws:
+            from config import load_allow_full_paths
+
+            config = {"allowFullPaths": False}
+            config_path = ws.path / "appsettings.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+
+            result = load_allow_full_paths(ws.path)
+
+            self.assertFalse(result)
+
+    def test_load_allow_full_paths_ignores_non_bool(self) -> None:
+        """Returns default when value is not a boolean."""
+        with TempWorkspace() as ws:
+            from config import load_allow_full_paths
+
+            config = {"allowFullPaths": "yes"}
+            config_path = ws.path / "appsettings.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+
+            result = load_allow_full_paths(ws.path)
+
+            self.assertFalse(result)
+
+    def test_load_allow_full_paths_ignores_invalid_json(self) -> None:
+        """Returns default when config is invalid JSON."""
+        with TempWorkspace() as ws:
+            from config import load_allow_full_paths
+
+            config_path = ws.path / "appsettings.json"
+            config_path.write_text("not valid json", encoding="utf-8")
+
+            result = load_allow_full_paths(ws.path)
+
+            self.assertFalse(result)
+
+
 if __name__ == "__main__":
     unittest.main()

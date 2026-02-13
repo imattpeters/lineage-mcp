@@ -66,6 +66,7 @@ docker build -t lineage-mcp . && docker run -v /your/workspace:/data lineage-mcp
 | `encoding='utf-8'` on file ops                | System default encoding          |
 | `offset`/`limit` for large files              | Read entire multi-MB files       |
 | `replace_all=True` for multiple occurrences   | Fail on ambiguous replacements   |
+| `allowFullPaths` to access paths outside base | Assume all paths are unrestricted|
 
 ## 📁 Files
 
@@ -228,8 +229,10 @@ edit("file.txt", "old", "new", replace_all=True)  # Replaces all occurrences
 
 ### Security
 
-- **ALWAYS** `resolve_path()` validates paths within BASE_DIR
-- **NEVER** allow `..` traversal outside BASE_DIR
+- **ALWAYS** `resolve_path()` validates paths within BASE_DIR (unless `allowFullPaths` is enabled)
+- **NEVER** allow `..` traversal outside BASE_DIR (unless `allowFullPaths` is enabled)
+- When `allowFullPaths: true` in `appsettings.json`, any absolute path on the system can be accessed
+- Default: `allowFullPaths: false` (restricted to BASE_DIR)
 
 ## ❌ Common Pitfalls → ✅ Fix
 

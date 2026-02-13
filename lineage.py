@@ -9,8 +9,8 @@ from typing import Dict, List
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from config import DEBUG_CLIENT_INFO, ENABLE_MULTI_EDIT, ENABLE_MULTI_READ, get_read_char_limit
-from path_utils import init_base_dir_from_args
+from config import ALLOW_FULL_PATHS, DEBUG_CLIENT_INFO, ENABLE_MULTI_EDIT, ENABLE_MULTI_READ, get_read_char_limit
+from path_utils import init_base_dir_from_args, set_allow_full_paths
 from tools import (
     clear_cache,
     delete_file,
@@ -25,6 +25,9 @@ from tools import (
 
 # Initialize base directory from command line argument
 init_base_dir_from_args()
+
+# Apply allowFullPaths setting from config
+set_allow_full_paths(ALLOW_FULL_PATHS)
 
 # Create MCP server instance
 mcp = FastMCP("lineage")

@@ -14,6 +14,8 @@ if _parent_dir not in sys.path:
 
 from tests.test_utils import TempWorkspace
 
+from path_utils import resolve_path
+
 
 class TestPathResolution(unittest.TestCase):
     """Tests for path resolution operations."""
@@ -60,6 +62,85 @@ class TestPathSecurity(unittest.TestCase):
             result = resolve_path("/etc/passwd")
 
             self.assertFalse(result.success)
+
+
+class TestAllowFullPaths(unittest.TestCase):
+    """Tests for allowFullPaths path resolution."""
+
+    def test_allows_traversal_when_enabled(self) -> None:
+        """Verify paths outside base are allowed when allowFullPaths is True."""
+        import path_utils
+
+        with TempWorkspace():
+            old_allow = path_utils._allow_full_paths
+            path_utils._allow_full_paths = True
+            try:
+                result = resolve_path("../../../etc/passwd")
+
+                self.assertTrue(result.success)
+            finally:
+                path_utils._allow_full_paths = old_allow
+
+    def test_allows_absolute_paths_when_enabled(self) -> None:
+        """Verify absolute paths outside base are allowed when allowFullPaths is True."""
+        import path_utils
+
+        with TempWorkspace():
+            old_allow = path_utils._allow_full_paths
+            path_utils._allow_full_paths = True
+            try:
+                if sys.platform == "win32":
+                    result = resolve_path("C:\\Windows\\System32")
+                else:
+                    result = resolve_path("/etc/passwd")
+
+                self.assertTrue(result.success)
+            finally:
+                path_utils._allow_full_paths = old_allow
+
+    def test_still_resolves_relative_paths_when_enabled(self) -> None:
+        """Verify relative paths still resolve against base dir when allowFullPaths is True."""
+        import path_utils
+
+        with TempWorkspace() as ws:
+            old_allow = path_utils._allow_full_paths
+            path_utils._allow_full_paths = True
+            try:
+                result = resolve_path("subdir/file.txt")
+
+                self.assertTrue(result.success)
+                self.assertEqual(result.path, ws.path / "subdir" / "file.txt")
+            finally:
+                path_utils._allow_full_paths = old_allow
+
+    def test_blocks_traversal_when_disabled(self) -> None:
+        """Verify paths outside base are blocked when allowFullPaths is False."""
+        import path_utils
+
+        with TempWorkspace():
+            old_allow = path_utils._allow_full_paths
+            path_utils._allow_full_paths = False
+            try:
+                result = resolve_path("../../../etc/passwd")
+
+                self.assertFalse(result.success)
+            finally:
+                path_utils._allow_full_paths = old_allow
+
+    def test_set_allow_full_paths(self) -> None:
+        """Verify set_allow_full_paths updates the global flag."""
+        import path_utils
+        from path_utils import get_allow_full_paths, set_allow_full_paths
+
+        old_allow = path_utils._allow_full_paths
+        try:
+            set_allow_full_paths(True)
+            self.assertTrue(get_allow_full_paths())
+
+            set_allow_full_paths(False)
+            self.assertFalse(get_allow_full_paths())
+        finally:
+            path_utils._allow_full_paths = old_allow
 
 
 class TestFileMtime(unittest.TestCase):

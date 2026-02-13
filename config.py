@@ -24,6 +24,9 @@ DEFAULT_READ_CHAR_LIMIT: int = 50000
 # Default debug client info setting
 DEFAULT_DEBUG_CLIENT_INFO: bool = False
 
+# Default allow full paths setting (restrict to base dir)
+DEFAULT_ALLOW_FULL_PATHS: bool = False
+
 
 def load_instruction_file_names(config_dir: Path | None = None) -> List[str]:
     """Load instruction file names from appsettings.json.
@@ -207,6 +210,36 @@ def load_debug_client_info(config_dir: Path | None = None) -> bool:
     return DEFAULT_DEBUG_CLIENT_INFO
 
 
+def load_allow_full_paths(config_dir: Path | None = None) -> bool:
+    """Load the allowFullPaths setting from appsettings.json.
+
+    When enabled, file operations are not restricted to the base directory.
+    Any absolute path on the system can be accessed. Use with caution.
+
+    Args:
+        config_dir: Directory containing appsettings.json. If None, uses script directory.
+
+    Returns:
+        Boolean indicating if full paths are allowed. Defaults to False.
+    """
+    if config_dir is None:
+        config_dir = Path(__file__).parent
+
+    config_path = config_dir / "appsettings.json"
+
+    try:
+        if config_path.is_file():
+            with config_path.open("r", encoding="utf-8") as f:
+                config = json.load(f)
+                value = config.get("allowFullPaths")
+                if isinstance(value, bool):
+                    return value
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    return DEFAULT_ALLOW_FULL_PATHS
+
+
 def load_client_overrides(config_dir: Path | None = None) -> dict:
     """Load per-client configuration overrides from appsettings.json.
 
@@ -279,3 +312,4 @@ ENABLE_MULTI_EDIT: bool = load_enable_multi_edit()
 READ_CHAR_LIMIT: int = load_read_char_limit()
 CLIENT_OVERRIDES: dict = load_client_overrides()
 DEBUG_CLIENT_INFO: bool = load_debug_client_info()
+ALLOW_FULL_PATHS: bool = load_allow_full_paths()
