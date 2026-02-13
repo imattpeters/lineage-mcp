@@ -119,6 +119,7 @@ async def read_file(
     offset: int | None = None,
     limit: int | None = None,
     cursor: int | None = None,
+    read_char_limit: int | None = None,
 ) -> str:
     """Read the contents of a file.
 
@@ -140,11 +141,15 @@ async def read_file(
         limit: Optional number of lines to read.
         cursor: Optional character offset for cursor-based pagination.
                 Use the cursor value from a previous response to continue reading.
+        read_char_limit: Optional character limit override. If None, uses the
+                         global READ_CHAR_LIMIT from config.
 
     Returns:
         File contents with optional line numbers, [CHANGED_FILES] and instruction
         file sections appended.
     """
+    # Use provided limit or fall back to global config
+    effective_char_limit = read_char_limit if read_char_limit is not None else READ_CHAR_LIMIT
     # Handle new_session - clear all caches
     if new_session:
         session.try_new_session()
@@ -208,7 +213,7 @@ async def read_file(
     elif offset is None and limit is None:
         # Auto-detect: will the total output exceed the limit?
         total_output_estimate = total_chars + overhead_size + 300  # rough header/footer
-        needs_cursor_pagination = total_output_estimate > READ_CHAR_LIMIT
+        needs_cursor_pagination = total_output_estimate > effective_char_limit
         if needs_cursor_pagination:
             cursor = 0
     else:
@@ -226,7 +231,7 @@ async def read_file(
         # Calculate content budget: total limit minus overhead minus header/footer estimate
         # We'll calculate the actual header/footer after extraction, but the size is predictable
         header_footer_estimate = 200 + len(file_path) * 2  # conservative
-        content_budget = READ_CHAR_LIMIT - overhead_size - header_footer_estimate
+        content_budget = effective_char_limit - overhead_size - header_footer_estimate
 
         # Always allow at least some content (at minimum one line)
         # If budget goes negative due to large overhead, we still show at least one line
@@ -245,7 +250,7 @@ async def read_file(
             reads_remaining = 0
         else:
             remaining_chars = total_chars - next_cursor
-            reads_remaining = math.ceil(remaining_chars / READ_CHAR_LIMIT)
+            reads_remaining = math.ceil(remaining_chars / effective_char_limit)
 
         # Calculate percentage of file in this response
         chunk_size = next_cursor - cursor

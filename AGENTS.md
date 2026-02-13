@@ -159,6 +159,23 @@ Config via `appsettings.json`:
 {"instructionFileNames": ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md", "AGENT.md", ".cursorrules"]}
 ```
 
+### Per-Client Configuration
+
+Override settings per MCP client using `clientOverrides` in `appsettings.json`:
+
+```json
+{
+  "readCharLimit": 7000,
+  "clientOverrides": {
+    "OpenCode": { "readCharLimit": 50000 },
+    "Cursor": { "readCharLimit": 15000 }
+  }
+}
+```
+
+The client name is auto-detected from the MCP `clientInfo.name` sent during initialization.
+Falls back to the global `readCharLimit` when no override matches.
+
 ## 🔧 Tools
 
 | Tool                                                                | Returns                                        |

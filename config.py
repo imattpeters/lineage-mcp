@@ -21,6 +21,9 @@ DEFAULT_ENABLE_MULTI_EDIT: bool = True
 # Default character limit for pagination
 DEFAULT_READ_CHAR_LIMIT: int = 50000
 
+# Default debug client info setting
+DEFAULT_DEBUG_CLIENT_INFO: bool = False
+
 
 def load_instruction_file_names(config_dir: Path | None = None) -> List[str]:
     """Load instruction file names from appsettings.json.
@@ -174,8 +177,105 @@ def load_read_char_limit(config_dir: Path | None = None) -> int:
     return DEFAULT_READ_CHAR_LIMIT
 
 
+def load_debug_client_info(config_dir: Path | None = None) -> bool:
+    """Load the debugClientInfo setting from appsettings.json.
+
+    When enabled, the detected MCP client name and effective readCharLimit
+    are prepended to read() responses for debugging purposes.
+
+    Args:
+        config_dir: Directory containing appsettings.json. If None, uses script directory.
+
+    Returns:
+        Boolean indicating if debug client info should be shown. Defaults to False.
+    """
+    if config_dir is None:
+        config_dir = Path(__file__).parent
+
+    config_path = config_dir / "appsettings.json"
+
+    try:
+        if config_path.is_file():
+            with config_path.open("r", encoding="utf-8") as f:
+                config = json.load(f)
+                value = config.get("debugClientInfo")
+                if isinstance(value, bool):
+                    return value
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    return DEFAULT_DEBUG_CLIENT_INFO
+
+
+def load_client_overrides(config_dir: Path | None = None) -> dict:
+    """Load per-client configuration overrides from appsettings.json.
+
+    Reads the 'clientOverrides' object from appsettings.json. Each key is a
+    client name (matching the MCP clientInfo.name sent during initialization),
+    and the value is a dict of config overrides for that client.
+
+    Example config:
+        {
+            "clientOverrides": {
+                "OpenCode": { "readCharLimit": 50000 },
+                "Cursor": { "readCharLimit": 15000 }
+            }
+        }
+
+    Args:
+        config_dir: Directory containing appsettings.json. If None, uses script directory.
+
+    Returns:
+        Dict mapping client names to their config overrides.
+    """
+    if config_dir is None:
+        config_dir = Path(__file__).parent
+
+    config_path = config_dir / "appsettings.json"
+
+    try:
+        if config_path.is_file():
+            with config_path.open("r", encoding="utf-8") as f:
+                config = json.load(f)
+                overrides = config.get("clientOverrides")
+                if isinstance(overrides, dict):
+                    return overrides
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    return {}
+
+
+def get_read_char_limit(client_name: str | None = None) -> int:
+    """Get the effective readCharLimit for a given client.
+
+    Checks clientOverrides first for a client-specific value (case-insensitive),
+    then falls back to the global READ_CHAR_LIMIT.
+
+    Args:
+        client_name: The MCP client name from clientInfo.name
+                     (e.g. "OpenCode", "claude-desktop").
+                     If None, returns the global default.
+
+    Returns:
+        Character limit as integer.
+    """
+    if client_name:
+        # Case-insensitive lookup: build a lower-case mapping
+        client_name_lower = client_name.lower()
+        for key, override in CLIENT_OVERRIDES.items():
+            if key.lower() == client_name_lower and isinstance(override, dict):
+                value = override.get("readCharLimit")
+                if isinstance(value, int) and value > 0:
+                    return value
+
+    return READ_CHAR_LIMIT
+
+
 # Singleton: Load instruction file names at module import
 INSTRUCTION_FILE_NAMES: List[str] = load_instruction_file_names()
 ENABLE_MULTI_READ: bool = load_enable_multi_read()
 ENABLE_MULTI_EDIT: bool = load_enable_multi_edit()
 READ_CHAR_LIMIT: int = load_read_char_limit()
+CLIENT_OVERRIDES: dict = load_client_overrides()
+DEBUG_CLIENT_INFO: bool = load_debug_client_info()

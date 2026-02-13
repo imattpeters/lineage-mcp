@@ -501,5 +501,66 @@ class TestConfigLoader(unittest.TestCase):
             self.assertEqual(result, DEFAULT_READ_CHAR_LIMIT)
 
 
+class TestReadCharLimitParameter(unittest.TestCase):
+    """Tests that read_file respects the read_char_limit parameter."""
+
+    def test_explicit_limit_triggers_pagination(self):
+        """Passing a small read_char_limit forces pagination on a normal-sized file."""
+        with TempWorkspace() as ws:
+            from session_state import session
+            from tools.read_file import read_file
+
+            session.clear()
+
+            # Create a file that is larger than the limit we'll pass
+            lines = [f"Line {i:02d}: " + "X" * 490 + "\n" for i in range(20)]
+            ws.create_file("test.txt", "".join(lines))
+
+            # Pass a small limit directly (no patching needed)
+            result = run_async(read_file("test.txt", read_char_limit=2000))
+
+            self.assertIn("chars 0-", result)
+            self.assertIn("reads remaining", result)
+            self.assertIn("cursor=", result)
+
+            session.clear()
+
+    def test_explicit_limit_does_not_paginate_small_file(self):
+        """Large explicit limit doesn't paginate a small file."""
+        with TempWorkspace() as ws:
+            from session_state import session
+            from tools.read_file import read_file
+
+            session.clear()
+
+            ws.create_file("small.txt", "Hello World\n")
+
+            result = run_async(read_file("small.txt", read_char_limit=50000))
+
+            self.assertNotIn("cursor=", result)
+            self.assertIn("Hello World", result)
+
+            session.clear()
+
+    def test_none_limit_falls_back_to_global(self):
+        """read_char_limit=None falls back to module-level READ_CHAR_LIMIT."""
+        with TempWorkspace() as ws:
+            from session_state import session
+            from tools.read_file import read_file
+
+            session.clear()
+
+            # Create a file just under the global limit (50000 by default)
+            ws.create_file("medium.txt", "A" * 100 + "\n")
+
+            # None means use global limit; file is tiny so no pagination
+            result = run_async(read_file("medium.txt", read_char_limit=None))
+
+            self.assertNotIn("cursor=", result)
+            self.assertIn("A" * 100, result)
+
+            session.clear()
+
+
 if __name__ == "__main__":
     unittest.main()

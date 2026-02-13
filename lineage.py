@@ -7,9 +7,9 @@ and instruction file discovery.
 import sys
 from typing import Dict, List
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
-from config import ENABLE_MULTI_EDIT, ENABLE_MULTI_READ
+from config import DEBUG_CLIENT_INFO, ENABLE_MULTI_EDIT, ENABLE_MULTI_READ, get_read_char_limit
 from path_utils import init_base_dir_from_args
 from tools import (
     clear_cache,
@@ -28,6 +28,16 @@ init_base_dir_from_args()
 
 # Create MCP server instance
 mcp = FastMCP("lineage")
+
+
+def _get_client_name(ctx: Context | None) -> str | None:
+    """Extract the MCP client name from the Context, if available."""
+    try:
+        if ctx and ctx.session and ctx.session.client_params:
+            return ctx.session.client_params.clientInfo.name
+    except (AttributeError, TypeError):
+        pass
+    return None
 
 
 # Register tools with MCP server
@@ -92,6 +102,7 @@ async def read(
     offset: int | None = None,
     limit: int | None = None,
     cursor: int | None = None,
+    ctx: Context = None,
 ) -> str:
     """Read the contents of a file.
 
@@ -137,9 +148,18 @@ async def read(
         and continuation instructions with the next cursor value.
         [CHANGED_FILES] and [AGENTS.MD] sections appended as usual.
     """
-    return await read_file(
-        file_path, new_session, show_line_numbers, offset, limit, cursor
+    client_name = _get_client_name(ctx)
+    char_limit = get_read_char_limit(client_name)
+
+    result = await read_file(
+        file_path, new_session, show_line_numbers, offset, limit, cursor, char_limit
     )
+
+    if DEBUG_CLIENT_INFO:
+        debug_prefix = f"[Client: {client_name or 'unknown'} | readCharLimit: {char_limit}]\n"
+        result = debug_prefix + result
+
+    return result
 
 
 @mcp.tool()
