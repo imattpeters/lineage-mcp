@@ -31,17 +31,21 @@ class SessionState:
     contents: Dict[str, str] = field(default_factory=dict)
     provided_folders: set[str] = field(default_factory=set)
     last_new_session_time: Optional[float] = field(default=None)
+    new_session_clear_count: int = field(default=0)
 
     def clear(self) -> None:
         """Clear all session caches unconditionally.
 
         Called by the explicit clear() tool. Ignores cooldown.
         Also resets the cooldown timer.
+        Increments clear count (never reset) so base instruction files
+        are included after the first compaction.
         """
         self.mtimes.clear()
         self.contents.clear()
         self.provided_folders.clear()
         self.last_new_session_time = None
+        self.new_session_clear_count += 1
 
     def try_new_session(self) -> bool:
         """Attempt to clear caches for a new_session request.
@@ -65,6 +69,7 @@ class SessionState:
         self.contents.clear()
         self.provided_folders.clear()
         self.last_new_session_time = now
+        self.new_session_clear_count += 1
         return True
 
     def track_file(self, file_path: str, mtime_ms: int, content: str) -> None:
@@ -105,6 +110,19 @@ class SessionState:
             True if already provided, False otherwise.
         """
         return folder_path in self.provided_folders
+
+    def should_include_base_instruction_files(self) -> bool:
+        """Check if base directory instruction files should be included.
+
+        On the first session, the harness (VS Code, OpenCode) loads the base
+        AGENTS.md/CLAUDE.md. After context compaction triggers a second
+        new_session clear, the LLM has lost that context and needs the base
+        instruction files re-provided.
+
+        Returns:
+            True if clear count >= 2 (i.e., at least one compaction has occurred).
+        """
+        return self.new_session_clear_count >= 2
 
 
 # Singleton session state instance

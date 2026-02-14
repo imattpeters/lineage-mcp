@@ -114,9 +114,11 @@ class SessionState:
     contents: dict[str, str]         # {path: content}
     provided_folders: set[str]       # Folders already shown
     last_new_session_time: float | None  # Monotonic timestamp of last clear
+    new_session_clear_count: int     # Times caches were cleared (never reset)
 
-    def clear(self) -> None: ...           # Unconditional clear (resets cooldown)
-    def try_new_session(self) -> bool: ... # Clear with 30s cooldown
+    def clear(self) -> None: ...           # Unconditional clear (resets cooldown, increments count)
+    def try_new_session(self) -> bool: ... # Clear with 30s cooldown (increments count if cleared)
+    def should_include_base_instruction_files(self) -> bool: ...  # True when count >= 2
 ```
 
 ### Path Resolution
@@ -151,8 +153,13 @@ Walks up from target file to BASE_DIR, includes first matching file per folder:
 # Reading src/app/page.tsx checks:
 # src/app/AGENTS.md? → include if found
 # src/AGENTS.md? → include if found  
-# AGENTS.md at BASE_DIR → EXCLUDED
+# AGENTS.md at BASE_DIR → EXCLUDED (first session) / INCLUDED (after compaction)
 ```
+
+**Base directory instruction files:** On the first session, base dir files (e.g.,
+`AGENTS.md` at BASE_DIR) are excluded because the harness (VS Code, OpenCode)
+loads them. After context compaction triggers a second `new_session` clear
+(clear count ≥ 2), base dir files ARE included so the LLM recovers lost context.
 
 Config via `appsettings.json`:
 
@@ -223,7 +230,8 @@ edit("file.txt", "old", "new", replace_all=True)  # Replaces all occurrences
 
 - Priority order from `appsettings.json`, first match per folder wins
 - Include files **between** target and BASE_DIR only
-- BASE_DIR instruction files **excluded**
+- BASE_DIR instruction files **excluded** on first session (clear count < 2)
+- BASE_DIR instruction files **included** after compaction (clear count ≥ 2)
 - Folder tracked in `provided_folders` → never shown again in session
 - Only `new_session=True` resets
 

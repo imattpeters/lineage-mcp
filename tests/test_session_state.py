@@ -153,5 +153,97 @@ class TestNewSessionCooldown(unittest.TestCase):
         self.assertEqual(len(state.mtimes), 0)
 
 
+class TestNewSessionClearCount(unittest.TestCase):
+    """Tests for new_session_clear_count tracking and base instruction file inclusion."""
+
+    def test_initial_clear_count_is_zero(self) -> None:
+        """Verify fresh session has clear count of 0."""
+        from session_state import SessionState
+
+        state = SessionState()
+        self.assertEqual(state.new_session_clear_count, 0)
+
+    def test_try_new_session_increments_clear_count(self) -> None:
+        """Verify try_new_session() increments clear count when it actually clears."""
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()
+        self.assertEqual(state.new_session_clear_count, 1)
+
+    def test_suppressed_try_new_session_does_not_increment(self) -> None:
+        """Verify suppressed try_new_session() (within cooldown) does not increment."""
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()
+        self.assertEqual(state.new_session_clear_count, 1)
+
+        # Second call within cooldown - suppressed
+        state.try_new_session()
+        self.assertEqual(state.new_session_clear_count, 1)
+
+    def test_clear_increments_clear_count(self) -> None:
+        """Verify explicit clear() increments clear count."""
+        from session_state import SessionState
+
+        state = SessionState()
+        state.clear()
+        self.assertEqual(state.new_session_clear_count, 1)
+
+    def test_clear_count_survives_clear(self) -> None:
+        """Verify clear count is never reset by clear() or try_new_session()."""
+        import time
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()  # count = 1
+        self.assertEqual(state.new_session_clear_count, 1)
+
+        state.clear()  # count = 2
+        self.assertEqual(state.new_session_clear_count, 2)
+
+        state.try_new_session()  # count = 3 (cooldown was reset by clear)
+        self.assertEqual(state.new_session_clear_count, 3)
+
+    def test_should_include_base_instruction_files_false_initially(self) -> None:
+        """Verify base instruction files not included on first session."""
+        from session_state import SessionState
+
+        state = SessionState()
+        self.assertFalse(state.should_include_base_instruction_files())
+
+    def test_should_include_base_instruction_files_false_after_first_clear(self) -> None:
+        """Verify base instruction files not included after first clear only."""
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()
+        self.assertFalse(state.should_include_base_instruction_files())
+
+    def test_should_include_base_instruction_files_true_after_second_clear(self) -> None:
+        """Verify base instruction files included after second clear (compaction)."""
+        import time
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()  # count = 1
+
+        # Simulate cooldown expiry
+        state.last_new_session_time = time.monotonic() - 60
+
+        state.try_new_session()  # count = 2
+        self.assertTrue(state.should_include_base_instruction_files())
+
+    def test_should_include_base_instruction_files_true_via_explicit_clear(self) -> None:
+        """Verify base instruction files included when second clear is via clear()."""
+        from session_state import SessionState
+
+        state = SessionState()
+        state.try_new_session()  # count = 1
+        state.clear()  # count = 2
+        self.assertTrue(state.should_include_base_instruction_files())
+
+
 if __name__ == "__main__":
     unittest.main()

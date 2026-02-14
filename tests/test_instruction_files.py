@@ -36,17 +36,25 @@ class TestInstructionFileDiscovery(unittest.TestCase):
             self.assertEqual(found[0][1], agents_md)
 
     def test_instruction_file_at_base_dir_excluded(self) -> None:
-        """Verify instruction files at BASE_DIR are not included."""
+        """Verify instruction files at BASE_DIR are not included on first session."""
         with TempWorkspace() as ws:
             from instruction_files import find_instruction_files_in_parents
+            from session_state import session
 
-            # Create AGENTS.md at base and a file at base
-            ws.create_file("AGENTS.md", "# Root Instructions")
-            test_file = ws.create_file("test.txt", "content")
+            # Ensure we're simulating a fresh session (no compaction yet)
+            old_count = session.new_session_clear_count
+            session.new_session_clear_count = 0
 
-            found = find_instruction_files_in_parents(test_file)
+            try:
+                # Create AGENTS.md at base and a file at base
+                ws.create_file("AGENTS.md", "# Root Instructions")
+                test_file = ws.create_file("test.txt", "content")
 
-            self.assertEqual(len(found), 0)
+                found = find_instruction_files_in_parents(test_file)
+
+                self.assertEqual(len(found), 0)
+            finally:
+                session.new_session_clear_count = old_count
 
     def test_multiple_parents_discovered(self) -> None:
         """Verify instruction files from multiple parent levels are found."""
@@ -113,6 +121,120 @@ class TestInstructionFileDeduplication(unittest.TestCase):
             self.assertEqual(content2, "")
 
             session.clear()
+
+
+class TestBaseDirectoryInstructionFiles(unittest.TestCase):
+    """Tests for base directory instruction file inclusion after compaction."""
+
+    def test_base_dir_excluded_on_first_session(self) -> None:
+        """Verify base dir instruction files excluded on initial session."""
+        with TempWorkspace() as ws:
+            from instruction_files import find_instruction_files_in_parents
+            from session_state import session
+
+            # Reset to fresh state
+            old_count = session.new_session_clear_count
+            session.new_session_clear_count = 0
+
+            try:
+                ws.create_file("AGENTS.md", "# Root Instructions")
+                test_file = ws.create_file("test.txt", "content")
+
+                found = find_instruction_files_in_parents(test_file)
+                self.assertEqual(len(found), 0)
+            finally:
+                session.new_session_clear_count = old_count
+
+    def test_base_dir_excluded_after_first_clear(self) -> None:
+        """Verify base dir instruction files still excluded after only one clear."""
+        with TempWorkspace() as ws:
+            from instruction_files import find_instruction_files_in_parents
+            from session_state import session
+
+            old_count = session.new_session_clear_count
+            session.new_session_clear_count = 1
+
+            try:
+                ws.create_file("AGENTS.md", "# Root Instructions")
+                test_file = ws.create_file("test.txt", "content")
+
+                found = find_instruction_files_in_parents(test_file)
+                self.assertEqual(len(found), 0)
+            finally:
+                session.new_session_clear_count = old_count
+
+    def test_base_dir_included_after_second_clear(self) -> None:
+        """Verify base dir instruction files included after compaction (2nd clear)."""
+        with TempWorkspace() as ws:
+            from instruction_files import find_instruction_files_in_parents
+            from session_state import session
+
+            old_count = session.new_session_clear_count
+            session.new_session_clear_count = 2
+
+            try:
+                base_agents = ws.create_file("AGENTS.md", "# Root Instructions")
+                test_file = ws.create_file("test.txt", "content")
+
+                found = find_instruction_files_in_parents(test_file)
+
+                self.assertEqual(len(found), 1)
+                self.assertEqual(found[0][1], base_agents)
+            finally:
+                session.new_session_clear_count = old_count
+
+    def test_base_dir_included_alongside_parent_files(self) -> None:
+        """Verify base dir files are included together with parent dir files."""
+        with TempWorkspace() as ws:
+            from instruction_files import find_instruction_files_in_parents
+            from session_state import session
+
+            old_count = session.new_session_clear_count
+            session.new_session_clear_count = 2
+
+            try:
+                base_agents = ws.create_file("AGENTS.md", "# Root")
+                parent_agents = ws.create_file("parent/AGENTS.md", "# Parent")
+                test_file = ws.create_file("parent/child/test.txt", "content")
+
+                found = find_instruction_files_in_parents(test_file)
+
+                self.assertEqual(len(found), 2)
+                # Parent dir file found first, then base dir appended
+                self.assertEqual(found[0][1], parent_agents)
+                self.assertEqual(found[1][1], base_agents)
+            finally:
+                session.new_session_clear_count = old_count
+
+    def test_base_dir_deduped_via_provided_folders(self) -> None:
+        """Verify base dir instruction file goes through provided_folders dedup."""
+        with TempWorkspace() as ws:
+            from instruction_files import (
+                find_instruction_files_in_parents,
+                include_instruction_file_content,
+            )
+            from session_state import session
+
+            old_count = session.new_session_clear_count
+            session.new_session_clear_count = 2
+            session.provided_folders.clear()
+
+            try:
+                ws.create_file("AGENTS.md", "# Root Instructions")
+                test_file = ws.create_file("test.txt", "content")
+
+                # First time: should include base dir
+                found = find_instruction_files_in_parents(test_file)
+                content1 = include_instruction_file_content(found)
+                self.assertIn("Root Instructions", content1)
+
+                # Second time: base dir already provided, should be empty
+                found = find_instruction_files_in_parents(test_file)
+                content2 = include_instruction_file_content(found)
+                self.assertEqual(content2, "")
+            finally:
+                session.new_session_clear_count = old_count
+                session.provided_folders.clear()
 
 
 if __name__ == "__main__":

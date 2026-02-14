@@ -20,7 +20,10 @@ def find_instruction_files_in_parents(target_path: Path) -> List[tuple[Path, Pat
     instruction files in priority order (INSTRUCTION_FILE_NAMES) and includes
     only the first one found per folder.
 
-    Does NOT include instruction files at BASE_DIR.
+    Normally does NOT include instruction files at BASE_DIR, since the harness
+    (VS Code, OpenCode) loads them on first boot. However, after context
+    compaction (detected by session clear count >= 2), base directory instruction
+    files ARE included so the LLM can recover that context.
 
     Args:
         target_path: Path to the file being read (absolute).
@@ -54,6 +57,15 @@ def find_instruction_files_in_parents(target_path: Path) -> List[tuple[Path, Pat
             # Reached filesystem root
             break
         current = parent
+
+    # After compaction, also include base directory instruction files
+    # so the LLM can recover context lost during summarisation
+    if session.should_include_base_instruction_files():
+        for file_name in INSTRUCTION_FILE_NAMES:
+            instruction_file = base_dir / file_name
+            if instruction_file.is_file():
+                found.append((base_dir, instruction_file))
+                break
 
     return found
 
