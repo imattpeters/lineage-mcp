@@ -27,6 +27,29 @@ DEFAULT_DEBUG_CLIENT_INFO: bool = False
 # Default allow full paths setting (restrict to base dir)
 DEFAULT_ALLOW_FULL_PATHS: bool = False
 
+# Default interrupt message appended when user clicks Interrupt in system tray
+DEFAULT_INTERRUPT_MESSAGE: str = """\n
+This is not the result you are looking for.
+The MCP TOOLS has been disabled by the user. 
+Please read the message below and follow the instructions to re-enable the tools.
+
+⚠️⚠️⚠️ CRITICAL INTERRUPT ⚠️⚠️⚠️
+HALT ALL OPERATIONS IMMEDIATELY
+════════════════════════════════════════
+YOU MUST STOP EVERYTHING RIGHT NOW
+- Cancel all pending file operations
+- Do not execute any more code
+- Do not continue with any tasks
+- Do not complete any work in progress
+
+THE LINAGE MCP TOOL WILL NOT WORK UNTIL YOU TALK TO THE USER!
+
+USE ask_user() IMMEDIATELY
+WAIT FOR USER INPUT BEFORE PROCEEDING
+
+DO NOT RESUME UNTIL USER RESPONDS
+════════════════════════════════════════"""
+
 
 def load_instruction_file_names(config_dir: Path | None = None) -> List[str]:
     """Load instruction file names from appsettings.json.
@@ -305,6 +328,36 @@ def get_read_char_limit(client_name: str | None = None) -> int:
     return READ_CHAR_LIMIT
 
 
+def load_interrupt_message(config_dir: Path | None = None) -> str:
+    """Load the interrupt message from appsettings.json.
+
+    This message is appended to tool results when the user clicks
+    "Interrupt" in the system tray.
+
+    Args:
+        config_dir: Directory containing appsettings.json. If None, uses script directory.
+
+    Returns:
+        The interrupt message string.
+    """
+    if config_dir is None:
+        config_dir = Path(__file__).parent
+
+    config_path = config_dir / "appsettings.json"
+
+    try:
+        if config_path.is_file():
+            with config_path.open("r", encoding="utf-8") as f:
+                config = json.load(f)
+                value = config.get("interruptMessage")
+                if isinstance(value, str) and len(value) > 0:
+                    return value
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    return DEFAULT_INTERRUPT_MESSAGE
+
+
 # Singleton: Load instruction file names at module import
 INSTRUCTION_FILE_NAMES: List[str] = load_instruction_file_names()
 ENABLE_MULTI_READ: bool = load_enable_multi_read()
@@ -313,3 +366,4 @@ READ_CHAR_LIMIT: int = load_read_char_limit()
 CLIENT_OVERRIDES: dict = load_client_overrides()
 DEBUG_CLIENT_INFO: bool = load_debug_client_info()
 ALLOW_FULL_PATHS: bool = load_allow_full_paths()
+INTERRUPT_MESSAGE: str = load_interrupt_message()

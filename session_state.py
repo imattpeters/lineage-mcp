@@ -32,6 +32,7 @@ class SessionState:
     provided_folders: set[str] = field(default_factory=set)
     last_new_session_time: Optional[float] = field(default=None)
     new_session_clear_count: int = field(default=0)
+    interrupted: bool = field(default=False)
 
     def clear(self) -> None:
         """Clear all session caches unconditionally.
@@ -123,6 +124,25 @@ class SessionState:
             True if clear count >= 2 (i.e., at least one compaction has occurred).
         """
         return self.new_session_clear_count >= 2
+
+    def check_interrupted(self) -> bool:
+        """Check if the session is in interrupted mode.
+
+        When interrupted, ALL tool calls should return only the interrupt
+        message. The interrupted state persists until resume() is called
+        (via the system tray Resume action).
+
+        Returns:
+            True if the session is interrupted, False otherwise.
+        """
+        return self.interrupted
+
+    def resume(self) -> None:
+        """Clear the interrupted flag, returning to normal operation.
+
+        Called when the user clicks Resume in the system tray.
+        """
+        self.interrupted = False
 
 
 # Singleton session state instance
