@@ -12,7 +12,6 @@ async def edit_file(
     old_string: str,
     new_string: str,
     replace_all: bool = False,
-    new_session: bool = False,
 ) -> str:
     """Edit a file by replacing exact string matches.
 
@@ -21,15 +20,10 @@ async def edit_file(
         old_string: Exact text to find and replace (must match exactly including whitespace)
         new_string: Text to replace old_string with
         replace_all: If True, replace all occurrences; if False, old_string must be unique
-        new_session: If True, clears all server caches before operation.
 
     Returns:
         Success message with replacement count, or error message
     """
-    # Handle new_session - clear all caches
-    if new_session:
-        session.try_new_session()
-
     result = resolve_path(file_path)
     if not result.success:
         return result.error

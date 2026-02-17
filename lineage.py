@@ -9,7 +9,7 @@ from typing import Dict, List
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from config import ALLOW_FULL_PATHS, DEBUG_CLIENT_INFO, ENABLE_MULTI_EDIT, ENABLE_MULTI_READ, INTERRUPT_MESSAGE, get_read_char_limit
+from config import ALLOW_FULL_PATHS, DEBUG_CLIENT_INFO, ENABLE_MULTI_EDIT, INTERRUPT_MESSAGE, get_read_char_limit
 from path_utils import init_base_dir_from_args, set_allow_full_paths
 from session_state import session
 from tools import (
@@ -18,7 +18,6 @@ from tools import (
     edit_file,
     list_files,
     multi_edit_file,
-    multi_read_file,
     read_file,
     search_files,
     write_file,
@@ -41,7 +40,6 @@ except Exception:
 # Create MCP server instance
 mcp = FastMCP("lineage")
 
-
 def _get_client_name(ctx: Context | None) -> str | None:
     """Extract the MCP client name from the Context, if available."""
     try:
@@ -50,7 +48,6 @@ def _get_client_name(ctx: Context | None) -> str | None:
     except (AttributeError, TypeError):
         pass
     return None
-
 
 def _check_interrupted() -> str | None:
     """Check if the session is in interrupted mode.
@@ -65,7 +62,6 @@ def _check_interrupted() -> str | None:
     if session.check_interrupted():
         return INTERRUPT_MESSAGE
     return None
-
 
 def _tray_notify_tool_call(
     tool_name: str, args_summary: str, ctx: Context | None = None
@@ -86,80 +82,54 @@ def _tray_notify_tool_call(
     except Exception:
         pass  # Tray updates are best-effort
 
-
 # Register tools with MCP server
 @mcp.tool()
-async def list(path: str = "", new_session: bool = False, ctx: Context = None) -> str:
+async def list(path: str = "", ctx: Context = None) -> str:
     """List all files in the specified directory.
-
-    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-    call you made in this conversation (not a summary)?
-      → NO or UNSURE: new_session=True is REQUIRED
-      → YES, I see complete previous output: new_session=False is fine
-
-    Missing this = missing AGENTS.md instruction files. When in doubt, always
-    use new_session=True - it's safe.
 
     Args:
         path: Optional subdirectory path relative to the base directory
-        new_session: Set True if you cannot see full output of a previous lineage
-                     call in this conversation. Clears server caches so instruction
-                     files are re-provided. Safe to use when uncertain.
 
     Returns:
         Markdown formatted table of files/directories with metadata and changed files section.
-        If you receive a "⚠️⚠️⚠️ CRITICAL INTERRUPT ⚠️⚠️⚠️" message, you MUST stop all
+        If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
     _tray_notify_tool_call("list", path, ctx)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
-    result = await list_files(path, new_session)
+    result = await list_files(path)
     update_tray_files_tracked(len(session.mtimes))
     return result
 
-
 @mcp.tool()
-async def search(pattern: str, path: str = "", new_session: bool = False, ctx: Context = None) -> str:
+async def search(pattern: str, path: str = "", ctx: Context = None) -> str:
     """Search for files matching a glob pattern.
 
     Searches for files using glob patterns (e.g., "*.txt", "**/*.py", "src/*/config.json").
     Supports recursive patterns with ** syntax. Returns list of matching file paths
     relative to the base directory.
 
-    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-    call you made in this conversation (not a summary)?
-      → NO or UNSURE: new_session=True is REQUIRED
-      → YES, I see complete previous output: new_session=False is fine
-
-    Missing this = missing AGENTS.md instruction files. When in doubt, always
-    use new_session=True - it's safe.
-
     Args:
         pattern: Glob pattern to search for (e.g., "*.txt", "src/**/*.py")
         path: Optional subdirectory to search within (relative to base directory)
-        new_session: Set True if you cannot see full output of a previous lineage
-                     call in this conversation. Clears server caches so instruction
-                     files are re-provided. Safe to use when uncertain.
 
     Returns:
         List of matching file paths, or error message if pattern is invalid.
-        If you receive a "⚠️⚠️⚠️ CRITICAL INTERRUPT ⚠️⚠️⚠️" message, you MUST stop all
+        If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
     _tray_notify_tool_call("search", pattern, ctx)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
-    result = await search_files(pattern, path, new_session)
+    result = await search_files(pattern, path)
     return result
-
 
 @mcp.tool()
 async def read(
     file_path: str,
-    new_session: bool = False,
     show_line_numbers: bool = False,
     offset: int | None = None,
     limit: int | None = None,
@@ -179,19 +149,8 @@ async def read(
     When a file exceeds the character limit (default 50,000), it is automatically
     paginated. Each read returns complete lines and a cursor value for the next call.
 
-    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-    call you made in this conversation (not a summary)?
-      → NO or UNSURE: new_session=True is REQUIRED
-      → YES, I see complete previous output: new_session=False is fine
-
-    Missing this = missing AGENTS.md instruction files. When in doubt, always
-    use new_session=True - it's safe.
-
     Args:
         file_path: Path to the file relative to the base directory
-        new_session: Set True if you cannot see full output of a previous lineage
-                     call in this conversation. Clears server caches so instruction
-                     files are re-provided. Safe to use when uncertain.
         show_line_numbers: If True, format output with line numbers (N→content). Defaults to False.
         offset: Optional 0-based line number to start reading from. If None, starts at line 0.
                 If offset >= total lines, returns empty result.
@@ -209,7 +168,7 @@ async def read(
         For paginated reads: includes progress info, line range, reads remaining,
         and continuation instructions with the next cursor value.
         [CHANGED_FILES] and [AGENTS.MD] sections appended as usual.
-        If you receive a "⚠️⚠️⚠️ CRITICAL INTERRUPT ⚠️⚠️⚠️" message, you MUST stop all
+        If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
     _tray_notify_tool_call("read", file_path, ctx)
@@ -220,7 +179,7 @@ async def read(
     char_limit = get_read_char_limit(client_name)
 
     result = await read_file(
-        file_path, new_session, show_line_numbers, offset, limit, cursor, char_limit
+        file_path, show_line_numbers, offset, limit, cursor, char_limit
     )
 
     if DEBUG_CLIENT_INFO:
@@ -230,39 +189,26 @@ async def read(
     update_tray_files_tracked(len(session.mtimes))
     return result
 
-
 @mcp.tool()
-async def write(file_path: str, content: str, new_session: bool = False, ctx: Context = None) -> str:
+async def write(file_path: str, content: str, ctx: Context = None) -> str:
     """Write content to a file.
-
-    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-    call you made in this conversation (not a summary)?
-      → NO or UNSURE: new_session=True is REQUIRED
-      → YES, I see complete previous output: new_session=False is fine
-
-    Missing this = missing AGENTS.md instruction files. When in doubt, always
-    use new_session=True - it's safe.
 
     Args:
         file_path: Path to the file relative to the base directory
         content: Content to write to the file
-        new_session: Set True if you cannot see full output of a previous lineage
-                     call in this conversation. Clears server caches so instruction
-                     files are re-provided. Safe to use when uncertain.
 
     Returns:
         Success or error message.
-        If you receive a "⚠️⚠️⚠️ CRITICAL INTERRUPT ⚠️⚠️⚠️" message, you MUST stop all
+        If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
     _tray_notify_tool_call("write", file_path, ctx)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
-    result = await write_file(file_path, content, new_session)
+    result = await write_file(file_path, content)
     update_tray_files_tracked(len(session.mtimes))
     return result
-
 
 @mcp.tool()
 async def edit(
@@ -270,7 +216,6 @@ async def edit(
     old_string: str,
     new_string: str,
     replace_all: bool = False,
-    new_session: bool = False,
     ctx: Context = None,
 ) -> str:
     """Edit a file by replacing exact string matches.
@@ -278,43 +223,30 @@ async def edit(
     Performs targeted string replacements in a file. The old_string must exist
     in the file and be unique (unless replace_all is True).
 
-    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-    call you made in this conversation (not a summary)?
-      → NO or UNSURE: new_session=True is REQUIRED
-      → YES, I see complete previous output: new_session=False is fine
-
-    Missing this = missing AGENTS.md instruction files. When in doubt, always
-    use new_session=True - it's safe.
-
     Args:
         file_path: Path to the file relative to the base directory
         old_string: Exact text to find and replace (must match exactly including whitespace)
         new_string: Text to replace old_string with
         replace_all: If True, replace all occurrences; if False, old_string must be unique
-        new_session: Set True if you cannot see full output of a previous lineage
-                     call in this conversation. Clears server caches so instruction
-                     files are re-provided. Safe to use when uncertain.
 
     Returns:
         Success message with replacement count, or error message.
-        If you receive a "⚠️⚠️⚠️ CRITICAL INTERRUPT ⚠️⚠️⚠️" message, you MUST stop all
+        If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
     _tray_notify_tool_call("edit", file_path, ctx)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
-    result = await edit_file(file_path, old_string, new_string, replace_all, new_session)
+    result = await edit_file(file_path, old_string, new_string, replace_all)
     update_tray_files_tracked(len(session.mtimes))
     return result
-
 
 if ENABLE_MULTI_EDIT:
 
     @mcp.tool()
     async def multi_edit(
         edits: List[Dict],
-        new_session: bool = False,
         ctx: Context = None,
     ) -> str:
         """Edit multiple files by replacing exact string matches in a single batch.
@@ -323,14 +255,6 @@ if ENABLE_MULTI_EDIT:
         Each edit specifies a file, old_string, and new_string. If one edit fails,
         remaining edits still proceed.
 
-        🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-        call you made in this conversation (not a summary)?
-           → NO or UNSURE: new_session=True is REQUIRED
-           → YES, I see complete previous output: new_session=False is fine
-
-        Missing this = missing AGENTS.md instruction files. When in doubt, always
-        use new_session=True - it's safe.
-
         Args:
             edits: List of edit operations. Each dict must contain:
                 - file_path (str): Path to the file relative to the base directory
@@ -338,97 +262,38 @@ if ENABLE_MULTI_EDIT:
                 - new_string (str): Text to replace old_string with
                 - replace_all (bool, optional): If True, replace all occurrences.
                   Defaults to False.
-            new_session: Set True if you cannot see full output of a previous lineage
-                         call in this conversation. Clears server caches so instruction
-                         files are re-provided. Safe to use when uncertain.
 
         Returns:
             Combined results for all edits, with per-edit success/error messages.
-            If you receive a "⚠️⚠️⚠️ CRITICAL INTERRUPT ⚠️⚠️⚠️" message, you MUST stop all
+            If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
             operations immediately and use ask_user() before proceeding.
         """
         _tray_notify_tool_call("multi_edit", f"{len(edits)} edits", ctx)
         interrupted = _check_interrupted()
         if interrupted:
             return interrupted
-        result = await multi_edit_file(edits, new_session)
-        update_tray_files_tracked(len(session.mtimes))
-        return result
-
-
-if ENABLE_MULTI_READ:
-
-    @mcp.tool()
-    async def multi_read(
-        file_paths: List[str],
-        new_session: bool = False,
-        show_line_numbers: bool = False,
-        ctx: Context = None,
-    ) -> str:
-        """Read the contents of multiple files in a single call (max 5).
-
-        Reads up to 5 files at once, returning their contents with clear separators.
-        Tracks all files for change detection and discovers instruction files.
-
-        🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-        call you made in this conversation (not a summary)?
-           → NO or UNSURE: new_session=True is REQUIRED
-           → YES, I see complete previous output: new_session=False is fine
-
-        Missing this = missing AGENTS.md instruction files. When in doubt, always
-        use new_session=True - it's safe.
-
-        Args:
-            file_paths: List of file paths relative to the base directory (max 5).
-            new_session: Set True if you cannot see full output of a previous lineage
-                         call in this conversation. Clears server caches so instruction
-                         files are re-provided. Safe to use when uncertain.
-            show_line_numbers: If True, format output with line numbers (N→content).
-                              Defaults to False.
-
-        Returns:
-            Combined file contents with per-file headers, [CHANGED_FILES] and
-            [AGENTS.MD] sections appended at the end.
-            If you receive a "⚠️⚠️⚠️ CRITICAL INTERRUPT ⚠️⚠️⚠️" message, you MUST stop all
-            operations immediately and use ask_user() before proceeding.
-        """
-        _tray_notify_tool_call("multi_read", f"{len(file_paths)} files", ctx)
-        interrupted = _check_interrupted()
-        if interrupted:
-            return interrupted
-        result = await multi_read_file(file_paths, new_session, show_line_numbers)
+        result = await multi_edit_file(edits)
         update_tray_files_tracked(len(session.mtimes))
         return result
 
 
 @mcp.tool()
-async def delete(file_path: str, new_session: bool = False, ctx: Context = None) -> str:
+async def delete(file_path: str, ctx: Context = None) -> str:
     """Delete a file or empty directory.
-
-    🛑 STOP AND CHECK: Can you see the FULL output of a previous lineage tool
-    call you made in this conversation (not a summary)?
-      → NO or UNSURE: new_session=True is REQUIRED
-      → YES, I see complete previous output: new_session=False is fine
-
-    Missing this = missing AGENTS.md instruction files. When in doubt, always
-    use new_session=True - it's safe.
 
     Args:
         file_path: Path to the file relative to the base directory
-        new_session: Set True if you cannot see full output of a previous lineage
-                     call in this conversation. Clears server caches so instruction
-                     files are re-provided. Safe to use when uncertain.
 
     Returns:
         Success or error message.
-        If you receive a "⚠️⚠️⚠️ CRITICAL INTERRUPT ⚠️⚠️⚠️" message, you MUST stop all
+        If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
     _tray_notify_tool_call("delete", file_path, ctx)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
-    result = await delete_file(file_path, new_session)
+    result = await delete_file(file_path)
     update_tray_files_tracked(len(session.mtimes))
     return result
 
@@ -441,13 +306,12 @@ async def clear() -> str:
     (provided_folders). Use when instruction files need to be re-provided
     after context compaction.
 
-    Alternative to using new_session=True on other tools.
+    Cache is also cleared automatically via the system tray or precompact hooks.
 
     Returns:
         Success message confirming cache was cleared
     """
     return await clear_cache()
-
 
 def main():
     """Entry point for CLI: lineage-mcp /path/to/base/dir
@@ -457,7 +321,6 @@ def main():
     initialized from command-line arguments at module import time.
     """
     mcp.run()
-
 
 if __name__ == "__main__":
     main()

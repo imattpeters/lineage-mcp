@@ -18,5 +18,8 @@
         "titleBar.inactiveBackground": "#3c338d99",
         "titleBar.inactiveForeground": "#e7e7e799"
     },
-    "peacock.color": "#3c338d"
+    "peacock.color": "#3c338d",
+    "cSpell.words": [
+        "Cooldown"
+    ]
 }

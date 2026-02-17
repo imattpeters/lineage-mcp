@@ -10,7 +10,6 @@ from session_state import session
 
 async def multi_edit_file(
     edits: list[dict[str, Any]],
-    new_session: bool = False,
 ) -> str:
     """Edit multiple files by replacing exact string matches in a single batch.
 
@@ -25,15 +24,10 @@ async def multi_edit_file(
             - new_string (str): Text to replace old_string with
             - replace_all (bool, optional): If True, replace all occurrences.
               Defaults to False.
-        new_session: If True, clears all server caches before operation.
 
     Returns:
         Combined results for all edits, with per-edit success/error messages.
     """
-    # Handle new_session - clear all caches
-    if new_session:
-        session.try_new_session()
-
     if not edits:
         return "Error: No edits provided"
 

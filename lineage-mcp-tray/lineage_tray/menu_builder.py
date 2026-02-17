@@ -11,7 +11,7 @@ from pystray import Menu, MenuItem
 if TYPE_CHECKING:
     from lineage_tray.message_log import MessageLog
     from lineage_tray.pipe_server import PipeServer
-    from lineage_tray.session_store import SessionInfo, SessionStore
+    from lineage_tray.session_store import CompactionEvent, SessionInfo, SessionStore
 
 
 def build_menu(
@@ -19,6 +19,7 @@ def build_menu(
     pipe_server: PipeServer,
     icon: pystray.Icon,
     message_log: MessageLog | None = None,
+    compaction_events: list[CompactionEvent] | None = None,
 ) -> list[MenuItem]:
     """Build the dynamic tray menu from current session state.
 
@@ -27,6 +28,7 @@ def build_menu(
         pipe_server: Pipe server for sending commands to sessions.
         icon: The pystray icon instance (for stop action).
         message_log: Optional message log for viewing recent messages.
+        compaction_events: Optional list of compaction events to display.
 
     Returns:
         List of MenuItem objects for the tray menu.
@@ -68,9 +70,40 @@ def build_menu(
 
         log_items = [MenuItem(label, on_view_log)]
 
+    # Compaction history section
+    compaction_items: list[MenuItem] = []
+    if compaction_events is not None:
+        total = len(compaction_events)
+        header_label = f"\U0001f504 Compactions ({total})" if total > 0 else "\U0001f504 Compactions"
+        if total == 0:
+            compaction_items = [
+                MenuItem(header_label, None, enabled=False),
+            ]
+        else:
+            # Show most recent events (up to 10)
+            recent = compaction_events[-10:]
+            event_items: list[MenuItem] = []
+            for event in reversed(recent):
+                event_items.append(
+                    MenuItem(event.display_str, None, enabled=False)
+                )
+                # Show details in a sub-line
+                detail = f"  {event.base_dir}"
+                event_items.append(
+                    MenuItem(detail, None, enabled=False)
+                )
+                if event.ancestor_chain_str:
+                    event_items.append(
+                        MenuItem(f"  {event.ancestor_chain_str}", None, enabled=False)
+                    )
+            compaction_items = [
+                MenuItem(header_label, Menu(*event_items)),
+            ]
+
     items.extend(
         [
             Menu.SEPARATOR,
+            *compaction_items,
             *log_items,
             MenuItem("Quit", lambda icon, item: icon.stop()),
         ]
@@ -128,7 +161,29 @@ def _make_session_submenu(
         MenuItem(
             f"Files: {session.files_tracked} tracked", None, enabled=False
         ),
+        Menu.SEPARATOR,
+        MenuItem("Process Chain:", None, enabled=False),
+        *_build_ancestor_items(session),
     )
+
+
+def _build_ancestor_items(session: SessionInfo) -> list[MenuItem]:
+    """Build menu items showing the ancestor PID chain.
+
+    Args:
+        session: The session whose ancestor chain to display.
+
+    Returns:
+        List of disabled MenuItems, one per ancestor.
+    """
+    if not session.ancestor_pids:
+        return [MenuItem("  (no chain data)", None, enabled=False)]
+    items = []
+    for i, pid in enumerate(session.ancestor_pids):
+        name = session.ancestor_names[i] if i < len(session.ancestor_names) else "?"
+        prefix = "  → " if i > 0 else "  "
+        items.append(MenuItem(f"{prefix}{name} ({pid})", None, enabled=False))
+    return items
 
 
 def _shorten_path(path: str, max_len: int = 45) -> str:
@@ -205,11 +260,12 @@ def _copy_session_info(session: SessionInfo) -> None:
         f"Base Directory: {session.base_dir}\n"
         f"Client: {session.client_name or 'Unknown'}\n"
         f"PID: {session.pid}\n"
+        f"Process Chain: {session.ancestor_chain_str}\n"
         f"Files Tracked: {session.files_tracked}\n"
         f"Active Since: {session.since_str}\n"
         f"\n"
-        f"Note: This session's cache has been cleared. Use new_session=True "
-        f"on your next lineage tool call to re-sync instruction files."
+        f"Note: This session's cache has been cleared. Instruction files will "
+        f"be re-provided on the next lineage tool call."
     )
 
     try:
@@ -254,7 +310,7 @@ def _show_message_log(message_log: MessageLog, store: SessionStore) -> None:
                 _message_log_window = None
 
     def _build_text() -> str:
-        entries = message_log.get_recent(50)
+        entries = message_log.get_recent(30)
         if not entries:
             return "No messages recorded yet."
         lines = []
@@ -297,6 +353,7 @@ def _show_message_log(message_log: MessageLog, store: SessionStore) -> None:
             )
             text_widget.insert(tk.END, _build_text())
             text_widget.config(state=tk.DISABLED)
+            text_widget.see(tk.END)  # Scroll to bottom to show newest entries
             text_widget.pack(fill=tk.BOTH, expand=True)
 
             # Bottom bar with buttons
@@ -344,6 +401,7 @@ def _show_message_log(message_log: MessageLog, store: SessionStore) -> None:
                     text_widget.delete("1.0", tk.END)
                     text_widget.insert(tk.END, new_text)
                     text_widget.config(state=tk.DISABLED)
+                    text_widget.see(tk.END)  # Scroll to bottom
                     window.after(2000, _refresh)
                 except Exception:
                     pass  # Window may have been closed

@@ -18,13 +18,13 @@ _NEW_SESSION_COOLDOWN_SECONDS: float = load_new_session_cooldown_seconds()
 class SessionState:
     """Holds all session-scoped caches that persist until server restart.
 
-    All caches are cleared together on new_session=True or server restart.
+    All caches are cleared together on cache clear (via tray/compaction) or server restart.
 
     Attributes:
         mtimes: Maps absolute file paths to their last-seen modification times (ms).
         contents: Maps absolute file paths to their last-seen content for diffing.
         provided_folders: Set of folder paths where instruction files have been shown.
-        last_new_session_time: Monotonic timestamp of the last new_session clear.
+        last_new_session_time: Monotonic timestamp of the last cooldown-protected clear.
     """
 
     mtimes: Dict[str, int] = field(default_factory=dict)
@@ -49,9 +49,9 @@ class SessionState:
         self.new_session_clear_count += 1
 
     def try_new_session(self) -> bool:
-        """Attempt to clear caches for a new_session request.
+        """Attempt to clear caches with cooldown protection.
 
-        If a new_session clear happened within the cooldown window,
+        If a cache clear happened within the cooldown window,
         the request is silently ignored to avoid redundant clears
         during the initial burst of tool calls.
 
@@ -117,7 +117,7 @@ class SessionState:
 
         On the first session, the harness (VS Code, OpenCode) loads the base
         AGENTS.md/CLAUDE.md. After context compaction triggers a second
-        new_session clear, the LLM has lost that context and needs the base
+        cache clear, the LLM has lost that context and needs the base
         instruction files re-provided.
 
         Returns:

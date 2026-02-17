@@ -114,7 +114,6 @@ def extract_content_by_cursor(
 
 async def read_file(
     file_path: str,
-    new_session: bool = False,
     show_line_numbers: bool = False,
     offset: int | None = None,
     limit: int | None = None,
@@ -135,7 +134,6 @@ async def read_file(
 
     Args:
         file_path: Path to the file relative to the base directory
-        new_session: If True, clears all server caches before operation.
         show_line_numbers: If True, format output with line numbers (N→content).
         offset: Optional 0-based line number to start reading from.
         limit: Optional number of lines to read.
@@ -150,9 +148,6 @@ async def read_file(
     """
     # Use provided limit or fall back to global config
     effective_char_limit = read_char_limit if read_char_limit is not None else READ_CHAR_LIMIT
-    # Handle new_session - clear all caches
-    if new_session:
-        session.try_new_session()
 
     # Validate pagination parameters
     if cursor is not None and (offset is not None or limit is not None):

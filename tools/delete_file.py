@@ -7,20 +7,15 @@ from path_utils import get_base_dir, resolve_path
 from session_state import session
 
 
-async def delete_file(file_path: str, new_session: bool = False) -> str:
+async def delete_file(file_path: str) -> str:
     """Delete a file or empty directory.
 
     Args:
         file_path: Path to the file relative to the base directory
-        new_session: If True, clears all server caches before operation.
 
     Returns:
         Success or error message
     """
-    # Handle new_session - clear all caches
-    if new_session:
-        session.try_new_session()
-
     result = resolve_path(file_path)
     if not result.success:
         return result.error

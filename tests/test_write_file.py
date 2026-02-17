@@ -99,23 +99,6 @@ class TestWriteFileCacheManagement(unittest.TestCase):
 class TestWriteFileSessionManagement(unittest.TestCase):
     """Tests for session state management during write operations."""
 
-    def test_new_session_clears_caches(self) -> None:
-        """Verify new_session=True clears all tracking."""
-        with TempWorkspace() as ws:
-            from session_state import session
-            from tools.write_file import write_file
-
-            # Track some files and folders
-            session.track_file("/some/file.txt", 12345, "content")
-            session.mark_folder_provided("/some/folder")
-
-            run_async(write_file("test.txt", "content", new_session=True))
-
-            # Previous tracking should be cleared
-            self.assertNotIn("/some/file.txt", session.mtimes)
-            self.assertFalse(session.is_folder_provided("/some/folder"))
-
-            session.clear()
 
 
 if __name__ == "__main__":

@@ -110,25 +110,6 @@ class TestEditFileCacheManagement(unittest.TestCase):
 class TestEditFileSessionManagement(unittest.TestCase):
     """Tests for session state management during edit operations."""
 
-    def test_new_session_clears_caches(self) -> None:
-        """Verify new_session=True clears all tracking."""
-        with TempWorkspace() as ws:
-            from session_state import session
-            from tools.edit_file import edit_file
-
-            # Track some files and folders
-            session.track_file("/some/file.txt", 12345, "content")
-            session.mark_folder_provided("/some/folder")
-
-            ws.create_file("test.txt", "Hello, World!")
-
-            run_async(edit_file("test.txt", "World", "Python", new_session=True))
-
-            # Previous tracking should be cleared
-            self.assertNotIn("/some/file.txt", session.mtimes)
-            self.assertFalse(session.is_folder_provided("/some/folder"))
-
-            session.clear()
 
 
 if __name__ == "__main__":

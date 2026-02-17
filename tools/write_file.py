@@ -7,21 +7,16 @@ from path_utils import get_file_mtime_ms, resolve_path
 from session_state import session
 
 
-async def write_file(file_path: str, content: str, new_session: bool = False) -> str:
+async def write_file(file_path: str, content: str) -> str:
     """Write content to a file.
 
     Args:
         file_path: Path to the file relative to the base directory
         content: Content to write to the file
-        new_session: If True, clears all server caches before operation.
 
     Returns:
         Success or error message
     """
-    # Handle new_session - clear all caches
-    if new_session:
-        session.try_new_session()
-
     result = resolve_path(file_path)
     if not result.success:
         return result.error

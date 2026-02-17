@@ -125,25 +125,6 @@ class TestDeleteFileCacheManagement(unittest.TestCase):
 class TestDeleteFileSessionManagement(unittest.TestCase):
     """Tests for session state management during delete operations."""
 
-    def test_new_session_clears_caches(self) -> None:
-        """Verify new_session=True clears all tracking."""
-        with TempWorkspace() as ws:
-            from session_state import session
-            from tools.delete_file import delete_file
-
-            # Track some files and folders
-            session.track_file("/some/file.txt", 12345, "content")
-            session.mark_folder_provided("/some/folder")
-
-            ws.create_file("to_delete.txt", "content")
-
-            run_async(delete_file("to_delete.txt", new_session=True))
-
-            # Previous tracking should be cleared
-            self.assertNotIn("/some/file.txt", session.mtimes)
-            self.assertFalse(session.is_folder_provided("/some/folder"))
-
-            session.clear()
 
 
 if __name__ == "__main__":

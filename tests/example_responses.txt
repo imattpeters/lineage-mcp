@@ -57,7 +57,7 @@ Found 1 file(s) matching '*.md':
 No files found matching pattern: *.nonexistent
 
 ================================================================================
-TOOL 3: read_file(file_path, new_session, show_line_numbers, offset, limit)
+TOOL 3: read_file(file_path, show_line_numbers, offset, limit)
 ================================================================================
 
 >>> read_file('README.md')  # Basic read
@@ -229,38 +229,12 @@ Original content line 2
 - /workspace/change_test.txt (modified): lines 1-4 (Xs ago)
 
 ================================================================================
-new_session AND clear() DEMO
+clear() DEMO
 ================================================================================
-
->>> read_file('README.md', new_session=True)  # Clears all caches
-
-# Test Project
 
 This is a test project.
 
->>> list_files('', new_session=True)  # new_session works on list
-
-| Name | Type | Size |
-|------|------|------|
-| src/ | 📁 dir | - |
-| AGENTS.md | 📄 file | 97 bytes |
-| change_test.txt | 📄 file | 62 bytes |
-| config.json | 📄 file | 44 bytes |
-| edit_test.py | 📄 file | 70 bytes |
-| multiline.txt | 📄 file | 742 bytes |
-| new_file.txt | 📄 file | 13 bytes |
-| README.md | 📄 file | 41 bytes |
-| replace_all_test.txt | 📄 file | 42 bytes |
-
->>> search_files('**/*.py', new_session=True)  # new_session works on search
-
-Found 1 file(s) matching '**/*.py':
-
 - edit_test.py
-
->>> clear_cache()  # Alternative to new_session=True
-
-Cache cleared. Instruction files will be re-provided on next read.
 
 ================================================================================
 ERROR HANDLING DEMO
@@ -286,20 +260,13 @@ Error: offset must be non-negative, got -1
 SUMMARY - ALL 7 TOOLS TESTED
 ================================================================================
 
-1. list_files(path, new_session) - Directory listing with markdown table
-2. search_files(pattern, path, new_session) - Glob pattern file search
-3. read_file(file_path, new_session, show_line_numbers, offset, limit)
+1. list_files(path) - Directory listing with markdown table
+2. search_files(pattern, path) - Glob pattern file search
+3. read_file(file_path, show_line_numbers, offset, limit)
    - Full and partial reads
    - Line number formatting
    - Instruction file discovery (AGENTS.md, CLAUDE.md, etc.)
    - Change detection
-4. write_file(file_path, content, new_session) - Create/overwrite files
-5. edit_file(file_path, old_string, new_string, replace_all, new_session) - String replacement
-6. delete_file(file_path, new_session) - Delete files and empty directories
-7. clear_cache() - Clear all session caches (alternative to new_session=True)
-
-All tools (except clear) support the new_session parameter for cache reset after session continuation.
-All tools include [CHANGED_FILES] section when external changes are detected.
-Changes are only reported once, then cache is updated.
-Instruction files shown once per folder per session (new_session=True or clear() resets).
-Configured instruction file names: ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'QWEN.md', 'AGENT.md', '.cursorrules']
+4. write_file(file_path, content) - Create/overwrite files
+5. edit_file(file_path, old_string, new_string, replace_all) - String replacement
+6. delete_file(file_path) - Delete files and empty directories

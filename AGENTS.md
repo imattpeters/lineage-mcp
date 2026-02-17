@@ -1,132 +1,104 @@
-# Lineage MCP - LLM Reference
+# Lineage MCP - LLM Quick Reference Guide
 
-> ⚠️ **CRITICAL**: File ops with **line-level change detection** + **instruction file auto-discovery**. Three patterns: (1) `new_session=True` on first call after compaction, (2) All paths relative to BASE_DIR, (3) Instruction files auto-append from parent dirs.
-
-## 🚫 GIT COMMANDS - CRITICAL RULE
-
-**NEVER run git commands (commit, push, tag, reset, etc.) without explicit user permission.**
-
-This is a public repository. Before running ANY git command, you MUST:
-1. Show the user exactly what command you plan to run
-2. Explain what it will do
-3. Wait for explicit "yes" confirmation
-4. Only then execute the command
-
-Violations of this rule can expose private information or corrupt public history.
-
-## 📝 Git Commit Message Format (Semantic Versioning)
-
-This project uses **python-semantic-release** for automatic versioning. Commit messages determine version bumps:
-
-| Prefix | Version Bump | Example |
-|--------|--------------|---------|
-| `fix:` | Patch (1.0.0 → 1.0.1) | `fix: resolve path handling bug` |
-| `perf:` | Patch (1.0.0 → 1.0.1) | `perf: optimize file reading` |
-| `feat:` | Minor (1.0.0 → 1.1.0) | `feat: add new search tool` |
-| `feat!:` | Major (1.0.0 → 2.0.0) | `feat!: change API interface` |
-| `fix!:` | Major (1.0.0 → 2.0.0) | `fix!: breaking change to config` |
-
-**Non-version commits (no version bump):**
-- `chore:` - maintenance tasks
-- `docs:` - documentation only
-- `ci:` - CI/CD changes
-- `refactor:` - code refactoring
-- `style:` - formatting, whitespace
-- `test:` - adding/updating tests
-
-**With scope (optional):**
-- `fix(path): resolve traversal issue`
-- `feat(tools): add partial read support`
-
-**Breaking changes (use `!` or footer):**
-- `feat!: new config format` OR
-- ```
-  feat: new config format
-
-  BREAKING CHANGE: config.json replaced with appsettings.json
-  ```
+> ⚠️ **CRITICAL FOR LLM AGENTS**: This is an MCP server with **line-level change detection**, **instruction file discovery**, and **system tray integration**. Cache clearing is handled automatically via the system tray or precompact hooks.
 
 ## 🎯 Quick Start
 
 ```bash
-python -m pytest tests/ -v              # Run tests
-python lineage.py /path/to/base/dir     # Run server (stdio)
+# Run tests
+python -m pytest tests/ -v
+
+# Run server (stdio mode)
+python lineage.py /path/to/base/dir
+
+# Run server with auto-tray launch
+cd lineage-mcp-tray && pip install -e . && python -m lineage_tray
+
+# Docker
+python lineage.py /path/to/base/dir
 docker build -t lineage-mcp . && docker run -v /your/workspace:/data lineage-mcp
 ```
 
-## ✅ DO / ❌ DON'T
+## 📁 Critical File Reference
 
-| ✅ DO                                          | ❌ DON'T                          |
-| --------------------------------------------- | -------------------------------- |
-| `resolve_path()` for all paths                | Concatenate paths directly       |
-| Relative paths: `src/app/file.ts`             | Absolute paths or backslashes    |
-| `new_session=True` first call after restart   | Forget → missing AGENTS.md files |
-| Check `result.success` before ops             | Skip security validation         |
-| `int(stat.st_mtime_ns / 1_000_000)` for mtime | Float or seconds                 |
-| `encoding='utf-8'` on file ops                | System default encoding          |
-| `offset`/`limit` for large files              | Read entire multi-MB files       |
-| `replace_all=True` for multiple occurrences   | Fail on ambiguous replacements   |
-| `allowFullPaths` to access paths outside base | Assume all paths are unrestricted|
+### Core Architecture Files
 
-## 📁 Files
+| File | Purpose | Key Features |
+|------|---------|--------------|
+| `lineage.py` | MCP server entry point | FastMCP instance, 8 tool registrations, tray client init |
+| `config.py` | Configuration management | `appsettings.json` loader, per-client overrides, interrupt messages |
+| `session_state.py` | Session-scoped state | `SessionState` dataclass with mtimes, contents, provided_folders, interruption state |
+| `path_utils.py` | Path validation | `resolve_path()`, traversal protection, `allowFullPaths` support |
+| `file_watcher.py` | Change detection | `difflib.unified_diff()` for line-level change ranges |
+| `instruction_files.py` | AGENTS.md discovery | Walks parent dirs, caches provided folders |
+| `tray_client.py` | Tray IPC client | Named pipe connection, session registration, command handling |
 
-| File                   | Purpose                                                     |
-| ---------------------- | ----------------------------------------------------------- |
-| `lineage.py`           | Entry point, FastMCP server, 8 tool registrations           |
-| `config.py`            | Loads `appsettings.json`, instruction file names            |
-| `session_state.py`     | `SessionState`: `mtimes`, `contents`, `provided_folders`    |
-| `path_utils.py`        | `PathResult`, `resolve_path()` blocks traversal             |
-| `file_watcher.py`      | `calculate_changed_line_ranges()` via difflib               |
-| `instruction_files.py` | `find_instruction_files_in_parents()`, folder caching       |
-| `tools/*.py`           | One file per tool (read, multi_read, write, edit, multi_edit, list, search, delete) |
+### Tool Implementations (tools/)
+
+| File | Tool | Key Feature |
+|------|------|-------------|
+| `read_file.py` | `read()` | Cursor/offset pagination, auto-paginate large files |
+| `edit_file.py` | `edit()` | String replacement, `replace_all` support |
+| `write_file.py` | `write()` | Auto-create parent dirs |
+| `delete_file.py` | `delete()` | File + empty dir removal |
+| `list_files.py` | `list()` | Markdown table output |
+| `search_files.py` | `search()` | Glob pattern matching |
+| `multi_edit_file.py` | `multi_edit()` | Batch edit operations |
+| `clear_cache.py` | `clear()` | Reset all session caches |
+
+### Tray Application (lineage-mcp-tray/lineage_tray/)
+
+| File | Purpose |
+|------|---------|
+| `app.py` | `TrayApp` orchestrator, ties together icon, server, store |
+| `pipe_server.py` | Named pipe server, accepts MCP server connections |
+| `session_store.py` | In-memory session registry grouped by base_dir |
+| `menu_builder.py` | Dynamic pystray menu from session state |
+| `actions.py` | Tray menu action implementations |
+| `message_log.py` | Thread-safe circular buffer for pipe messages |
+| `icon.py` | Programmatic icon generation with Pillow |
 
 ## 🏛️ Core Patterns
 
-### new_session Pattern
+### Cache Clearing
 
-**🛑 Before ANY lineage call**: Can you see FULL output of a previous lineage call (not summary)?
+Cache clearing is handled automatically:
 
-- **NO/UNSURE** → `new_session=True` REQUIRED
-- **YES** → `new_session=False` OK
+1. **System tray**: Click "Clear Cache" in the tray menu
+2. **Precompact hooks**: Automatically triggered during context compaction
+3. **Explicit clear()**: Call the `clear()` tool directly
 
-**Missing this = missing AGENTS.md**. When in doubt, use `new_session=True`.
+**Cooldown Behavior**: Cache clears within a 30s window are silently ignored to prevent redundant clears. Configurable via `newSessionCooldownSeconds` in `appsettings.json`. Explicit `clear()` ignores cooldown.
 
-**⏱️ Cooldown**: When `new_session=True` clears caches, subsequent `new_session=True` calls within 30 seconds are silently ignored. This prevents redundant clears during the initial burst of tool calls. Configurable via `newSessionCooldownSeconds` in `appsettings.json`. Explicit `clear()` always works regardless of cooldown.
-
-```python
-# After restart/compaction - use on ANY tool:
-list(path="", new_session=True)
-read(file_path="src/app/page.tsx", new_session=True)
-
-# Subsequent calls reuse caches:
-read(file_path="src/app/layout.tsx")  # new_session=False default
-
-# Alternative: forgot new_session? Use clear()
-clear()  # Resets all caches (ignores cooldown)
-```
-
-### SessionState
+### SessionState Dataclass
 
 ```python
 @dataclass
 class SessionState:
-    mtimes: dict[str, int]           # {path: mtime_ms}
-    contents: dict[str, str]         # {path: content}
-    provided_folders: set[str]       # Folders already shown
-    last_new_session_time: float | None  # Monotonic timestamp of last clear
-    new_session_clear_count: int     # Times caches were cleared (never reset)
+    mtimes: Dict[str, int]              # {abs_path: mtime_ms}
+    contents: Dict[str, str]            # {abs_path: full_content}
+    provided_folders: set[str]          # Folders where instruction files shown
+    last_new_session_time: float | None # Monotonic timestamp
+    new_session_clear_count: int        # Never reset (0, 1, 2+...)
+    interrupted: bool                   # Set via tray Interrupt action
 
-    def clear(self) -> None: ...           # Unconditional clear (resets cooldown, increments count)
-    def try_new_session(self) -> bool: ... # Clear with 30s cooldown (increments count if cleared)
-    def should_include_base_instruction_files(self) -> bool: ...  # True when count >= 2
+    def clear(self) -> None: ...                    # Unconditional
+    def try_new_session(self) -> bool: ...          # With 30s cooldown
+    def should_include_base_instruction_files(self) -> bool: ...  # count >= 2
 ```
 
 ### Path Resolution
 
 ```python
-result = resolve_path("src/app/file.ts")  # ✅ Allowed
-result = resolve_path("../other/file.ts") # ✅ If still in base dir
-result = resolve_path("/etc/passwd")      # ❌ Blocked
+from path_utils import resolve_path, PathResult
+
+# CORRECT - relative paths
+result = resolve_path("src/app/file.ts")    # ✅ Allowed
+result = resolve_path("../other/file.ts")   # ✅ If still in base dir
+
+# WRONG - absolute paths blocked (unless allowFullPaths enabled)
+result = resolve_path("/etc/passwd")        # ❌ Blocked
+result = resolve_path("C:\\Windows\\file") # ❌ Blocked
 
 # ALWAYS check result.success
 if not result.success:
@@ -135,153 +107,346 @@ if not result.success:
 
 ### Change Detection
 
-Files read are tracked. Re-reading detects external modifications:
-
 ```python
-read("myfile.txt")  # Tracks file
-# (External modification happens)
-read("myfile.txt")  # Returns: content + [CHANGED_FILES] section with line ranges
+# File is tracked on first read
+read("myfile.txt")  # Tracks mtime + content
+
+# External modification detected on re-read
+read("myfile.txt")  # Returns: content + [CHANGED_FILES] section
+# [CHANGED_FILES]
+# - /abs/path/myfile.txt (modified): lines 5-8,15-20 (3s ago)
 ```
 
-Uses `difflib.unified_diff()` → reports `"5-8,15-20"` for changed lines.
+**Implementation**: Uses `difflib.unified_diff()` with `context=0` to identify changed line ranges.
 
 ### Instruction File Discovery
 
-Walks up from target file to BASE_DIR, includes first matching file per folder:
+**Walks UP from target file to BASE_DIR**:
 
-```python
-# Reading src/app/page.tsx checks:
-# src/app/AGENTS.md? → include if found
-# src/AGENTS.md? → include if found  
-# AGENTS.md at BASE_DIR → EXCLUDED (first session) / INCLUDED (after compaction)
+```
+Reading: src/app/page.tsx
+Checks:  src/app/AGENTS.md? → include if found
+         src/AGENTS.md? → include if found
+         AGENTS.md at BASE_DIR → EXCLUDED (first session)
+                                   INCLUDED (after compaction)
 ```
 
-**Base directory instruction files:** On the first session, base dir files (e.g.,
-`AGENTS.md` at BASE_DIR) are excluded because the harness (VS Code, OpenCode)
-loads them. After context compaction triggers a second `new_session` clear
-(clear count ≥ 2), base dir files ARE included so the LLM recovers lost context.
+**Base Directory Files**: 
+- **First session** (clear count < 2): Excluded (harness loads them)
+- **After compaction** (clear count >= 2): Included (LLM lost context)
 
-Config via `appsettings.json`:
-
-```json
-{"instructionFileNames": ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md", "AGENT.md", ".cursorrules"]}
-```
-
-### Per-Client Configuration
-
-Override settings per MCP client using `clientOverrides` in `appsettings.json`:
-
+**Config** (`appsettings.json`):
 ```json
 {
-  "readCharLimit": 7000,
-  "clientOverrides": {
-    "OpenCode": { "readCharLimit": 50000 },
-    "Cursor": { "readCharLimit": 15000 }
-  }
+  "instructionFileNames": ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md", "AGENT.md", ".cursorrules"]
 }
 ```
 
-The client name is auto-detected from the MCP `clientInfo.name` sent during initialization.
-Falls back to the global `readCharLimit` when no override matches.
+## 📡 MCP Server ↔ Tray Communication Flow
 
-## 🔧 Tools
+### Architecture Overview
 
-| Tool                                                                | Returns                                        |
-| ------------------------------------------------------------------- | ---------------------------------------------- |
-| `list(path, new_session)`                                           | Markdown table + [CHANGED_FILES]               |
-| `read(file_path, new_session, show_line_numbers, offset, limit, cursor)` | Content + [CHANGED_FILES] + [INSTRUCTION_FILE] |
-| `write(file_path, content, new_session)`                            | Success/error                                  |
-| `edit(file_path, old_string, new_string, replace_all, new_session)` | Success/error                                  |
-| `multi_edit(edits, new_session)`                                    | Per-edit success/error + [CHANGED_FILES]       |
-| `multi_read(file_paths, new_session, show_line_numbers)`            | Per-file content + [CHANGED_FILES] + [AGENTS.MD] |
-| `search(pattern, path, new_session)`                                | File list + [CHANGED_FILES]                    |
-| `delete(file_path, new_session)`                                    | Success/error                                  |
-| `clear()`                                                           | Resets all caches                              |
-
-### Large Files
-
-```python
-read("huge.csv", offset=0, limit=100)       # Lines 1-100
-read("huge.csv", offset=100, limit=100)     # Lines 101-200
-read("huge.csv", show_line_numbers=True)    # 101→content...
-# Cursor-based pagination (auto-triggers for large files):
-read("huge.csv")                            # Returns first chunk + cursor value
-read("huge.csv", cursor=44500)              # Continue from cursor position
+```
+┌─────────────────┐      Named Pipe (Windows: \\.\pipe\lineage-mcp-tray)     ┌──────────────────┐
+│  lineage-mcp    │  ◄──────────────────────────────────────────────────────► │  lineage-mcp-tray│
+│  (MCP Server)   │    Unix Socket (macOS/Linux: /tmp/lineage-mcp-tray.sock)  │  (System Tray)   │
+└─────────────────┘                                                           └──────────────────┘
+        │                                                                            │
+        │  1. Registration                                                           │
+        │     TrayClient.connect() ──► PipeServer._accept_loop()                     │
+        │     {type: "register", session_id, pid, base_dir, client_name}             │
+        │                                                                            │
+        │  2. Updates (fire-and-forget)                                              │
+        │     TrayClient.update() ──► PipeServer._read_loop()                        │
+        │     {type: "update", session_id, files_tracked, last_tool}                 │
+        │                                                                            │
+        │  3. Commands (tray → MCP)                                                  │
+        │     PipeServer.send_to_session() ◄── Menu Actions                          │
+        │     {type: "clear_cache" | "interrupt" | "resume"}                         │
+        │                                                                            │
+        ▼                                                                            ▼
 ```
 
-### Edit Pattern
+### Message Types
+
+**MCP Server → Tray (TrayClient)**:
+
+| Type | When Sent | Payload |
+|------|-----------|---------|
+| `register` | On connection | `session_id, pid, base_dir, client_name, first_call, files_tracked` |
+| `update` | Every tool call | `files_tracked, last_tool, client_name, first_call` |
+| `unregister` | On disconnect | `session_id` |
+
+**Tray → MCP Server (PipeServer)**:
+
+| Type | Action | Handler |
+|------|--------|---------|
+| `clear_cache` | Reset session caches | `session.clear()` |
+| `interrupt` | Pause tool responses | `session.interrupted = True` |
+| `resume` | Resume normal operation | `session.resume()` |
+
+### TrayClient Implementation
 
 ```python
-edit("file.txt", "old", "new")              # Error if "old" appears multiple times
-edit("file.txt", "old", "new", replace_all=True)  # Replaces all occurrences
+# lineage.py initialization
+try:
+    init_tray_client(str(get_base_dir()))  # Non-blocking, best-effort
+except Exception:
+    pass  # Tray is optional
+
+# Tool call notification
+_tray_notify_tool_call("read", file_path, ctx)
+update_tray_files_tracked(len(session.mtimes), tool_name, args_summary)
 ```
 
-## 🚨 Rules
+### Tray Menu Actions
+
+```python
+# lineage_tray/actions.py
+def clear_cache(pipe_server, session) -> bool:
+    return pipe_server.send_to_session(
+        session.session_id, {"type": "clear_cache"}
+    )
+
+def interrupt(pipe_server, session) -> bool:
+    return pipe_server.send_to_session(
+        session.session_id, {"type": "interrupt"}
+    )
+
+def resume(pipe_server, session) -> bool:
+    return pipe_server.send_to_session(
+        session.session_id, {"type": "resume"}
+    )
+```
+
+### Interrupt Flow
+
+```
+User clicks "Interrupt" in tray
+         │
+         ▼
+PipeServer.send_to_session("interrupt")
+         │
+         ▼
+session.interrupted = True
+         │
+         ▼
+Next tool call: _check_interrupted() returns INTERRUPT_MESSAGE
+         │
+         ▼
+Tool returns ONLY the interrupt message, NO operations performed
+         │
+         ▼
+User clicks "Resume" → session.interrupted = False
+```
+
+**Interrupt Message**: Configurable via `interruptMessage` in `appsettings.json`. Default warns LLM to stop and use `ask_user()`.
+
+## ✅ DO / ❌ DON'T
+
+| ✅ DO | ❌ DON'T |
+|-------|----------|
+| Relative paths: `src/app/file.ts` | Absolute paths or backslashes |
+| `resolve_path()` for all paths | Concatenate paths directly |
+| Check `result.success` before ops | Skip security validation |
+| `int(stat.st_mtime_ns / 1_000_000)` for mtime | Float or seconds |
+| `encoding='utf-8'` on file ops | System default encoding |
+| `offset`/`limit` for large files | Read entire multi-MB files |
+| `replace_all=True` for multiple occurrences | Fail on ambiguous replacements |
+| Forward slashes on Windows | Backslashes in paths |
+
+## 🔧 Tools Reference
+
+### read()
+
+```python
+read(
+    file_path: str,              # Required: relative path
+    show_line_numbers: bool = False,
+    offset: int | None = None,   # Line-based: start line (0-indexed)
+    limit: int | None = None,    # Line-based: max lines
+    cursor: int | None = None,   # Char-based: start position
+) -> str
+```
+
+**Pagination Modes**:
+1. **Line-based**: `offset=100, limit=50` → Lines 101-150
+2. **Cursor-based**: `cursor=5000` → Auto-paginated chunk with continuation info
+3. **Auto-detect**: No offset/limit/cursor → Auto-paginates if file exceeds `readCharLimit`
+
+**Returns**: Content + `[CHANGED_FILES]` + `[Appending AGENTS.md]` sections
+
+### edit()
+
+```python
+edit(
+    file_path: str,
+    old_string: str,        # Exact match (including whitespace!)
+    new_string: str,
+    replace_all: bool = False,  # False = error if multiple matches
+) -> str
+```
+
+**Critical**: `old_string` must match **exactly** including whitespace and newlines.
+
+```python
+# CORRECT: Include exact whitespace
+edit("file.py", "def foo():\n    pass", "def foo():\n    return True")
+
+# WRONG: Missing newline
+edit("file.py", "def foo():    pass", "...")  # Will fail
+```
+
+### write()
+
+```python
+write(
+    file_path: str,
+    content: str,
+) -> str
+```
+
+Auto-creates parent directories via `full_path.parent.mkdir(parents=True, exist_ok=True)`.
+
+### list()
+
+```python
+list(
+    path: str = "",          # Subdirectory relative to base
+) -> str
+```
+
+**Returns**: Markdown table with Name, Type, Size columns + `[CHANGED_FILES]` section.
+
+### search()
+
+```python
+search(
+    pattern: str,            # Glob pattern: "**/*.py", "src/*/config.json"
+    path: str = "",         # Optional subdirectory
+) -> str
+```
+
+Supports `**` recursive patterns.
+
+### delete()
+
+```python
+delete(
+    file_path: str,
+) -> str
+```
+
+Removes files or **empty** directories (uses `rmdir()`, not `rmtree()`).
+
+### clear()
+
+```python
+clear() -> str
+```
+
+Unconditional cache clear. Resets: `mtimes`, `contents`, `provided_folders`, and cooldown timer.
+
+## 📝 Git Commit Messages (Semantic Versioning)
+
+| Prefix | Bump | Example |
+|--------|------|---------|
+| `fix:` | Patch | `fix: resolve path handling bug` |
+| `perf:` | Patch | `perf: optimize file reading` |
+| `feat:` | Minor | `feat: add new tool` |
+| `feat!:` | Major | `feat!: change API interface` |
+| `fix!:` | Major | `fix!: breaking change to config` |
+
+**No version bump**: `chore:`, `docs:`, `ci:`, `refactor:`, `style:`, `test:`
+
+## 🚫 CRITICAL RULES
+
+### NEVER Run Git Commands Without Permission
+
+This is a **public repository**. Before ANY git command:
+1. Show the user the exact command
+2. Explain what it will do  
+3. Wait for explicit "yes" confirmation
+4. Only then execute
+
+### Security
+
+- **ALWAYS** use `resolve_path()` - blocks traversal outside BASE_DIR
+- **NEVER** allow `..` escaping (unless `allowFullPaths: true`)
+- Default: `allowFullPaths: false` (restricted mode)
 
 ### Change Detection
 
 - mtime in **milliseconds**: `int(stat.st_mtime_ns / 1_000_000)`
-- Cache content in `session.contents` for line-level diffs
-- First read → `"1-EOF"` (no previous content)
-- [CHANGED_FILES] reports **external changes only** - edit()/write() update cache
-- Changes reported **once** then cache updates
+- First read → no change report (nothing to compare)
+- [CHANGED_FILES] reports **external changes only**
+- LLM edits/writes update cache immediately (not reported as changes)
 
 ### Instruction Files
 
-- Priority order from `appsettings.json`, first match per folder wins
-- Include files **between** target and BASE_DIR only
-- BASE_DIR instruction files **excluded** on first session (clear count < 2)
-- BASE_DIR instruction files **included** after compaction (clear count ≥ 2)
-- Folder tracked in `provided_folders` → never shown again in session
-- Only `new_session=True` resets
+- Priority order from `appsettings.json`, first match per folder
+- Folder tracked in `provided_folders` → never shown again (until cache is cleared)
+- BASE_DIR files excluded on first session, included after compaction
 
-### Security
+## ⚙️ Configuration (appsettings.json)
 
-- **ALWAYS** `resolve_path()` validates paths within BASE_DIR (unless `allowFullPaths` is enabled)
-- **NEVER** allow `..` traversal outside BASE_DIR (unless `allowFullPaths` is enabled)
-- When `allowFullPaths: true` in `appsettings.json`, any absolute path on the system can be accessed
-- Default: `allowFullPaths: false` (restricted to BASE_DIR)
+```json
+{
+  "instructionFileNames": ["AGENTS.md", "CLAUDE.md", "GEMINI.md"],
+  "newSessionCooldownSeconds": 30,
+  "readCharLimit": 50000,
+  "enableMultiEdit": true,
+  "debugClientInfo": false,
+  "allowFullPaths": false,
+  "clientOverrides": {
+    "OpenCode": { "readCharLimit": 50000 },
+    "Cursor": { "readCharLimit": 15000 }
+  },
+  "interruptMessage": "..."
+}
+```
 
-## ❌ Common Pitfalls → ✅ Fix
+## 🆘 Troubleshooting
 
-| Pitfall                                    | Fix                                              |
-| ------------------------------------------ | ------------------------------------------------ |
-| Forgot `new_session=True` after compaction | First lineage call: always `new_session=True`    |
-| Absolute paths `/home/user/file.txt`       | Relative: `file.txt`                             |
-| Backslashes on Windows                     | Forward slashes: `src/app/file.ts`               |
-| Reading multi-MB files                     | Use `offset`/`limit`                             |
-| Ambiguous string replacement               | More specific `old_string` or `replace_all=True` |
-| Instruction files not appearing            | Check `appsettings.json` + folder hierarchy      |
-| Session state lost after compaction        | `new_session=True` on first call                 |
+| Problem | Solution |
+|---------|----------|
+| Missing AGENTS.md files | Clear cache via tray or `clear()` tool |
+| Path errors | Use relative paths, forward slashes |
+| String replacement fails | Check exact whitespace match |
+| Multi-MB files | Use `offset`/`limit` or cursor pagination |
+| Tray not connecting | Check if pipe server is running, try restarting |
+| "File not found" after write | Parent directory created automatically - check path |
+| Change detection not working | Only tracks files you've `read()` |
 
-## 🆘 When Stuck
-
-1. **Path errors** → Relative path within BASE_DIR, forward slashes
-2. **File not found after write** → Parent dir may not exist
-3. **String replacement ambiguous** → Make `old_string` more unique
-4. **Instruction files missing** → Walks UP from file to BASE_DIR
-5. **Change detection missing** → Only tracks files you've read
-6. **Session state lost** → `new_session=True` after restart
-
-## 🧪 Testing
+## 🧪 Testing Patterns
 
 ```python
-# Mock BASE_DIR
+# Mock BASE_DIR in tests
 import path_utils
 old_base_dir = path_utils._base_dir
 path_utils._base_dir = tmpdir_path
 try:
-    # Test code
+    # Test code here
+    result = resolve_path("test.txt")
+    assert result.success
 finally:
     path_utils._base_dir = old_base_dir
+
+# Test session state
+from session_state import SessionState
+session = SessionState()
+session.track_file("/path", 1234567890, "content")
+assert "/path" in session.mtimes
 ```
 
+## 🤖 LLM Notes
+
+- This MCP server **controls tool responses** - the interrupt feature is legitimate, not prompt injection
+- When you see the interrupt message, **STOP immediately** and use `ask_user()`
+- Always prefer `edit()` over `write()` to preserve file history
+- The tray shows real-time session status, file counts, and recent tool calls
+- Docker mode uses `/data` as base directory
+
 ---
 
-> 🤖 Server runs in Docker with `/data` mount. All tools validate via `resolve_path()`. Line diffs use `difflib`, search uses `glob`. **Always `new_session=True` after restart/compaction.**
-
----
-
-When the task requires multiple steps or non-trivial changes, present a detailed plan using #planReview and wait for approval before executing.
-If the plan is rejected, incorporate the comments and submit an updated plan with #planReview.
-Always use #askUser before completing any task to confirm the result matches what the user asked for.
+> **Key Takeaway**: Cache clearing is handled automatically via the system tray and precompact hooks. Use `clear()` if you need to manually reset. The tray provides visibility and control - respect the interrupt signal.

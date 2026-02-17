@@ -4,23 +4,17 @@ from pathlib import Path
 
 from file_watcher import format_changed_files_section
 from path_utils import get_base_dir, resolve_path
-from session_state import session
 
 
-async def list_files(path: str = "", new_session: bool = False) -> str:
+async def list_files(path: str = "") -> str:
     """List all files in the specified directory.
 
     Args:
         path: Optional subdirectory path relative to the base directory
-        new_session: If True, clears all server caches before operation.
 
     Returns:
         Markdown formatted table of files/directories with metadata and changed files section.
     """
-    # Handle new_session - clear all caches
-    if new_session:
-        session.try_new_session()
-
     base_dir = get_base_dir()
     result = resolve_path(path)
     if not result.success:

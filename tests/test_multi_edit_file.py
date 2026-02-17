@@ -197,25 +197,6 @@ class TestMultiEditFileErrors(unittest.TestCase):
 class TestMultiEditFileSessionManagement(unittest.TestCase):
     """Tests for session state management during multi-edit."""
 
-    def test_new_session_clears_caches(self) -> None:
-        """Verify new_session=True clears all tracking."""
-        with TempWorkspace() as ws:
-            from session_state import session
-            from tools.multi_edit_file import multi_edit_file
-
-            session.track_file("/some/file.txt", 12345, "content")
-            session.mark_folder_provided("/some/folder")
-
-            ws.create_file("test.txt", "Hello")
-
-            run_async(multi_edit_file(
-                [{"file_path": "test.txt", "old_string": "Hello", "new_string": "Hi"}],
-                new_session=True,
-            ))
-
-            self.assertNotIn("/some/file.txt", session.mtimes)
-            self.assertFalse(session.is_folder_provided("/some/folder"))
-            session.clear()
 
     def test_edits_update_cache(self) -> None:
         """Verify multi-edit updates session cache."""

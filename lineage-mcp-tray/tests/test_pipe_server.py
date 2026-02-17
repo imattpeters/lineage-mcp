@@ -176,3 +176,124 @@ class TestPipeServer:
             conn.close()
         finally:
             server.stop()
+
+
+class TestExternalCommand:
+    """Tests for external command routing (clear_by_filter)."""
+
+    def test_external_command_routing(self):
+        """PipeServer routes clear_by_filter to external command handler."""
+        from lineage_tray.pipe_server import PipeServer
+
+        address = _test_pipe_address()
+        messages = []
+        external_commands = []
+
+        def on_msg(sid, msg):
+            messages.append((sid, msg))
+
+        def on_ext_cmd(msg):
+            external_commands.append(msg)
+            return {"sessions_cleared": 2}
+
+        server = PipeServer(
+            on_message=on_msg,
+            address=address,
+            on_external_command=on_ext_cmd,
+        )
+        server.start()
+
+        time.sleep(0.3)
+
+        try:
+            conn = Client(address, authkey=b"lineage-mcp-tray-v1")
+            conn.send({
+                "type": "clear_by_filter",
+                "base_dir": "C:\\test",
+                "client_name": "test-client",
+            })
+
+            if conn.poll(timeout=3):
+                response = conn.recv()
+                assert response["sessions_cleared"] == 2
+
+            conn.close()
+
+            # Should NOT have triggered on_message
+            assert len(messages) == 0
+            # Should have triggered on_external_command
+            assert len(external_commands) == 1
+            assert external_commands[0]["type"] == "clear_by_filter"
+            assert external_commands[0]["base_dir"] == "C:\\test"
+            assert external_commands[0]["client_name"] == "test-client"
+        finally:
+            server.stop()
+
+    def test_external_command_without_handler(self):
+        """PipeServer handles clear_by_filter gracefully when no handler is set."""
+        from lineage_tray.pipe_server import PipeServer
+
+        address = _test_pipe_address()
+        messages = []
+
+        server = PipeServer(
+            on_message=lambda sid, msg: messages.append((sid, msg)),
+            address=address,
+            # No on_external_command set
+        )
+        server.start()
+
+        time.sleep(0.3)
+
+        try:
+            conn = Client(address, authkey=b"lineage-mcp-tray-v1")
+            conn.send({
+                "type": "clear_by_filter",
+                "base_dir": "C:\\test",
+                "client_name": "test-client",
+            })
+
+            # Connection should be closed by server (no response expected)
+            time.sleep(0.5)
+            conn.close()
+        finally:
+            server.stop()
+
+
+class TestPrecompactRoundtrip:
+    """Integration test for the full precompact hook roundtrip."""
+
+    def test_precompact_roundtrip(self):
+        """Test: hook script -> tray -> session clear."""
+        address = _test_pipe_address()
+        authkey = b"test"
+        cleared = []
+
+        def mock_tray():
+            """Simulate tray: accept connection, process clear_by_filter."""
+            with Listener(address, authkey=authkey) as listener:
+                with listener.accept() as conn:
+                    msg = conn.recv()
+                    assert msg["type"] == "clear_by_filter"
+                    assert msg["base_dir"] is not None
+                    assert msg["client_name"] == "test-client"
+                    conn.send({"sessions_cleared": 1})
+                    cleared.append(True)
+
+        t = threading.Thread(target=mock_tray)
+        t.start()
+        time.sleep(0.2)
+
+        # Simulate what the hook script does
+        with Client(address, authkey=authkey) as conn:
+            conn.send({
+                "type": "clear_by_filter",
+                "base_dir": r"C:\git\lineage-mcp",
+                "client_name": "test-client",
+            })
+            if conn.poll(timeout=5.0):
+                response = conn.recv()
+                assert response["sessions_cleared"] == 1
+
+        t.join(timeout=5)
+        assert len(cleared) == 1

@@ -83,7 +83,7 @@ class TestSessionState(unittest.TestCase):
 
 
 class TestNewSessionCooldown(unittest.TestCase):
-    """Tests for new_session cooldown behavior."""
+    """Tests for cache clear cooldown behavior."""
 
     def test_first_try_new_session_clears(self) -> None:
         """Verify first try_new_session() clears caches."""

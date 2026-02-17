@@ -165,3 +165,57 @@ class TestSessionStateInterrupted:
         # Note: clear() resets caches but interrupted is user-initiated
         # The flag persists separately
         assert s.interrupted is True
+
+
+class TestHandleCommandCooldown:
+    """Tests that tray clear_cache commands respect the 30s cooldown."""
+
+    def test_clear_cache_command_uses_cooldown(self):
+        """Tray clear_cache uses try_new_session, not unconditional clear."""
+        from session_state import SessionState
+        s = SessionState()
+        s.track_file("/a.py", 123, "content")
+
+        # First clear works
+        result = s.try_new_session()
+        assert result is True
+        assert len(s.mtimes) == 0
+
+        # Re-add a file
+        s.track_file("/b.py", 456, "content2")
+
+        # Second clear within cooldown is suppressed
+        result = s.try_new_session()
+        assert result is False
+        assert len(s.mtimes) == 1  # File still tracked
+
+    def test_clear_cache_counts_once_not_twice(self):
+        """Double hook fire within cooldown only increments count once."""
+        from session_state import SessionState
+        s = SessionState()
+
+        # Simulate first hook firing
+        s.try_new_session()
+        assert s.new_session_clear_count == 1
+
+        # Simulate second hook firing (within cooldown)
+        s.try_new_session()
+        assert s.new_session_clear_count == 1  # Not 2
+
+    def test_explicit_clear_still_unconditional(self):
+        """The explicit clear() tool ignores cooldown."""
+        from session_state import SessionState
+        s = SessionState()
+        s.track_file("/a.py", 123, "content")
+
+        # Use try_new_session first (sets cooldown)
+        s.try_new_session()
+        assert s.new_session_clear_count == 1
+
+        # Re-add a file
+        s.track_file("/b.py", 456, "content2")
+
+        # Explicit clear() bypasses cooldown
+        s.clear()
+        assert s.new_session_clear_count == 2
+        assert len(s.mtimes) == 0

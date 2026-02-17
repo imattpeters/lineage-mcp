@@ -51,8 +51,10 @@ class PipeServer:
         address: str | None = None,
         authkey: bytes = PIPE_AUTHKEY,
         message_log: MessageLog | None = None,
+        on_external_command: Callable[[dict], dict] | None = None,
     ) -> None:
         self.on_message = on_message
+        self.on_external_command = on_external_command
         self.address = address or PIPE_ADDRESS
         self.authkey = authkey
         self.message_log = message_log
@@ -83,16 +85,23 @@ class PipeServer:
             conn = None
             try:
                 conn = self.listener.accept()
-                # First message must be a registration with session_id
                 try:
                     msg = conn.recv()
-                    if msg.get("type") == "register":
+                    msg_type = msg.get("type")
+
+                    if msg_type == "register":
+                        # Existing behavior: lineage-mcp session registration
                         session_id = msg["session_id"]
                         with self._lock:
                             self.connections[session_id] = conn
                         if self.message_log:
                             self.message_log.log_received(session_id, msg)
                         self.on_message(session_id, msg)
+
+                    elif msg_type == "clear_by_filter":
+                        # External command: hook script requesting cache clear
+                        self._handle_external_command(conn, msg)
+
                     else:
                         # Invalid first message - close connection
                         conn.close()
@@ -111,6 +120,30 @@ class PipeServer:
                 if self._running:
                     continue
                 break
+
+    def _handle_external_command(self, conn, msg) -> None:
+        """Handle a command from an external script (not a registered session).
+
+        The connection is short-lived: send response and close.
+        """
+        try:
+            cmd = msg.get("type")
+            if self.message_log:
+                # Log the incoming external command with a synthetic session ID
+                ext_label = f"hook:{msg.get('client_name', 'unknown')}"
+                self.message_log.log_received(ext_label, msg)
+            if cmd == "clear_by_filter" and self.on_external_command:
+                result = self.on_external_command(msg)
+                conn.send(result)
+                if self.message_log:
+                    self.message_log.log_sent(ext_label, result)
+        except (OSError, BrokenPipeError):
+            pass
+        finally:
+            try:
+                conn.close()
+            except OSError:
+                pass
 
     def _read_loop(self) -> None:
         """Poll all connections for incoming messages."""

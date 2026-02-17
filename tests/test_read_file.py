@@ -139,25 +139,6 @@ class TestReadFilePartial(unittest.TestCase):
 class TestReadFileSessionManagement(unittest.TestCase):
     """Tests for session state management during reads."""
 
-    def test_new_session_clears_caches(self) -> None:
-        """Verify new_session=True clears all tracking."""
-        with TempWorkspace() as ws:
-            from session_state import session
-            from tools.read_file import read_file
-
-            # Track some files and folders
-            session.track_file("/some/file.txt", 12345, "content")
-            session.mark_folder_provided("/some/folder")
-
-            ws.create_file("test.txt", "content")
-
-            run_async(read_file("test.txt", new_session=True))
-
-            # Previous tracking should be cleared
-            self.assertNotIn("/some/file.txt", session.mtimes)
-            self.assertFalse(session.is_folder_provided("/some/folder"))
-
-            session.clear()
 
 
 if __name__ == "__main__":

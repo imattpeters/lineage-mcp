@@ -5,24 +5,18 @@ from pathlib import Path
 
 from file_watcher import format_changed_files_section
 from path_utils import get_base_dir, resolve_path
-from session_state import session
 
 
-async def search_files(pattern: str, path: str = "", new_session: bool = False) -> str:
+async def search_files(pattern: str, path: str = "") -> str:
     """Search for files matching a glob pattern.
 
     Args:
         pattern: Glob pattern to search for (e.g., "*.txt", "src/**/*.py")
         path: Optional subdirectory to search within (relative to base directory)
-        new_session: If True, clears all server caches before operation.
 
     Returns:
         List of matching file paths, or error message if pattern is invalid.
     """
-    # Handle new_session - clear all caches
-    if new_session:
-        session.try_new_session()
-
     base_dir = get_base_dir()
     result = resolve_path(path)
     if not result.success:

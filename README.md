@@ -126,18 +126,43 @@ Before using Docker, build the image from the lineage-mcp directory:
 docker build -t lineage-mcp .
 ```
 
+### OpenCode
+
+OpenCode uses a [plugin system](https://opencode.ai/docs/plugins) for hooks. Lineage MCP includes a plugin that automatically clears caches when context compaction occurs.
+
+OpenCode auto-loads TypeScript/JavaScript files from `.opencode/plugins/` at startup. Copy the pre-built local plugin into your project:
+
+```bash
+# From your project root
+mkdir -p .opencode/plugins
+cp /path/to/lineage-mcp/plugins/opencode/local/lineage-precompact.ts .opencode/plugins/
+```
+
+Add `@opencode-ai/plugin` to `.opencode/package.json` (for the type import):
+
+```json
+{
+  "dependencies": {
+    "@opencode-ai/plugin": "latest"
+  }
+}
+```
+
+> **Note:** Edit the `PRECOMPACT_SCRIPT` path in the copied file to point to your lineage-mcp installation.
+
+The plugin hooks into `experimental.session.compacting` and calls `hooks/precompact.py` to clear lineage-mcp caches before context compaction.
+
 ## Tools Reference
 
 | Tool         | Description                         | Parameters                                                            |
 | ------------ | ----------------------------------- | --------------------------------------------------------------------- |
-| `list`       | List directory contents             | `path` (optional), `new_session`                                      |
-| `search`     | Search files by glob pattern        | `pattern`, `path` (optional), `new_session`                           |
-| `read`       | Read file with change tracking      | `file_path`, `new_session`, `show_line_numbers`, `offset`, `limit`    |
-| `multi_read` | Read up to 5 files in one call      | `file_paths`, `new_session`, `show_line_numbers`                      |
-| `write`      | Write content to file               | `file_path`, `content`, `new_session`                                 |
-| `edit`       | Replace string in file              | `file_path`, `old_string`, `new_string`, `replace_all`, `new_session` |
-| `multi_edit` | Batch string replacements           | `edits`, `new_session`                                                |
-| `delete`     | Delete file or empty directory      | `file_path`, `new_session`                                            |
+| `list`       | List directory contents             | `path` (optional)                                                     |
+| `search`     | Search files by glob pattern        | `pattern`, `path` (optional)                                          |
+| `read`       | Read file with change tracking      | `file_path`, `show_line_numbers`, `offset`, `limit`                   |
+| `write`      | Write content to file               | `file_path`, `content`                                                |
+| `edit`       | Replace string in file              | `file_path`, `old_string`, `new_string`, `replace_all`                |
+| `multi_edit` | Batch string replacements           | `edits`                                                               |
+| `delete`     | Delete file or empty directory      | `file_path`                                                           |
 | `clear`      | Clear all session caches            | (none)                                                                |
 
 ## Usage Examples
@@ -185,16 +210,6 @@ edit("config.py", "old_value", "new_value")
 
 # Replace all occurrences
 edit("config.py", "DEBUG = True", "DEBUG = False", replace_all=True)
-```
-
-### Batch File Reading
-
-```python
-# Read up to 5 files in one call
-multi_read(["src/app.py", "src/config.py", "README.md"])
-
-# With line numbers
-multi_read(["src/app.py", "src/utils.py"], show_line_numbers=True)
 ```
 
 ### Batch Editing
@@ -292,27 +307,14 @@ When enabled, absolute paths like `/var/log/app.log` or `C:\other\project\file.t
 
 LLM systems periodically "compact" or summarize conversation history to stay within context limits. When this happens, the detailed content from instruction files (AGENTS.md, CLAUDE.md, etc.) gets compressed or lost. The server's cache still thinks these files were "already provided" and won't re-send them.
 
-**🛑 Before calling any lineage tool, agents should check:**
+**Cache clearing is handled automatically:**
 
-> Can you see the FULL output of a previous lineage tool call you made in this conversation (not a summary)?
->
-> - **NO or UNSURE** → `new_session=True` is REQUIRED
-> - **YES, I see complete previous output** → `new_session=False` is fine
-
-**Two ways to reset caches:**
-
-1. **Use `new_session=True`** on first tool call:
+- **System tray**: Click "Clear Cache" in the tray menu
+- **Precompact hooks**: Automatically triggered during context compaction
+- **Explicit `clear()` tool**: Call directly when needed
 
 ```python
-list("", new_session=True)
-search("**/*.py", new_session=True)
-read("src/app.py", new_session=True)
-```
-
-2. **Use the `clear` tool** if the agent forgot to use `new_session=True`:
-
-```python
-clear()  # Then instruction files will be re-provided on next read
+clear()  # Instruction files will be re-provided on next read
 ```
 
 When caches are cleared:
@@ -321,15 +323,14 @@ When caches are cleared:
 - Instruction files will be re-appended to responses
 - Change detection restarts from a clean slate
 
-### new_session Cooldown
+### Cooldown
 
-When `new_session=True` clears caches, subsequent `new_session=True` calls within 30 seconds are silently ignored. This prevents redundant cache clears during the initial burst of tool calls that AI agents typically make at the start of a conversation.
+Cache clears within a 30-second window are silently ignored to prevent redundant clears during bursts of activity.
 
 - The cooldown is configurable via `newSessionCooldownSeconds` in `appsettings.json`
 - The explicit `clear()` tool always works regardless of cooldown
 - Set to `0` to disable the cooldown entirely
 
-**If an agent is missing instruction file content**, ask it to call `clear()` to reset the cache.
 
 ## Project Structure
 
@@ -345,7 +346,6 @@ lineage-mcp/
 │   ├── list_files.py
 │   ├── search_files.py
 │   ├── read_file.py
-│   ├── multi_read_file.py
 │   ├── write_file.py
 │   ├── edit_file.py
 │   ├── multi_edit_file.py

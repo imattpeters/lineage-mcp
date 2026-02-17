@@ -16,6 +16,8 @@ import time
 from multiprocessing.connection import Client
 from pathlib import Path
 
+from hooks.pid_utils import get_ancestor_chain
+
 
 def get_pipe_address() -> str:
     """Get the platform-appropriate pipe address.
@@ -70,6 +72,7 @@ class TrayClient:
             self._connected = True
 
             # Send registration
+            ancestor_chain = get_ancestor_chain()
             self.conn.send(
                 {
                     "type": "register",
@@ -80,6 +83,8 @@ class TrayClient:
                     "client_name": None,  # Updated later from clientInfo
                     "first_call": None,  # Updated on first tool call
                     "files_tracked": 0,
+                    "ancestor_pids": [pid for pid, _ in ancestor_chain],
+                    "ancestor_names": [name for _, name in ancestor_chain],
                 }
             )
 
@@ -164,7 +169,7 @@ class TrayClient:
         if cmd == "clear_cache":
             from session_state import session
 
-            session.clear()
+            session.try_new_session()
         elif cmd == "interrupt":
             from session_state import session
 

@@ -92,7 +92,7 @@ def include_instruction_file_content(instruction_files: List[tuple[Path, Path]])
 
         # Check if we've already provided an instruction file for this folder
         if session.is_folder_provided(folder_str):
-            # Already provided - skip (only new_session=True resets this)
+            # Already provided - skip (only clear() resets this)
             continue
 
         # New folder; include its instruction file
