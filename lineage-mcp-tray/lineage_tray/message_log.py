@@ -48,19 +48,11 @@ class LogEntry:
         msg_type = self.message.get("type", "?")
         extras = {k: v for k, v in self.message.items() if k not in ("type", "session_id")}
         if extras:
-            extras_str = ", ".join(f"{k}={_compact(v)}" for k, v in extras.items())
+            extras_str = ", ".join(f"{k}={v}" for k, v in extras.items())
             msg_repr = f"{msg_type} ({extras_str})"
         else:
             msg_repr = msg_type
         return f"[{self.time_str}] {self.direction_arrow} {label}: {msg_repr}"
-
-
-def _compact(value: Any, max_len: int = 40) -> str:
-    """Compact representation of a value for display."""
-    s = str(value)
-    if len(s) > max_len:
-        return s[: max_len - 3] + "..."
-    return s
 
 
 class MessageLog:

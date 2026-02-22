@@ -3,6 +3,7 @@
 Stores active lineage-mcp sessions, grouped by base_dir.
 """
 
+import logging
 import os
 import threading
 import time
@@ -10,6 +11,8 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
+
+logger = logging.getLogger("lineage_tray.session_store")
 
 
 # Known process names → inferred client name.
@@ -41,6 +44,29 @@ def infer_client_from_ancestors(ancestor_names: list[str]) -> str | None:
         lower = name.lower()
         if lower in PROCESS_CLIENT_MAP:
             return PROCESS_CLIENT_MAP[lower]
+    return None
+
+
+def _find_client_pid(
+    ancestor_pids: list[int], ancestor_names: list[str]
+) -> int | None:
+    """Find the PID of the first known client process in an ancestor chain.
+
+    Walks the ancestor chain from self toward root and returns the PID of
+    the first ancestor whose process name matches PROCESS_CLIENT_MAP.
+    This identifies which AI client (VS Code, OpenCode, Claude Code) spawned
+    the process.
+
+    Args:
+        ancestor_pids: PIDs ordered from self to root.
+        ancestor_names: Matching process names.
+
+    Returns:
+        PID of the client process, or None if no known client found.
+    """
+    for pid, name in zip(ancestor_pids, ancestor_names):
+        if name.lower() in PROCESS_CLIENT_MAP:
+            return pid
     return None
 
 
@@ -93,7 +119,7 @@ class SessionInfo:
 
 @dataclass
 class CompactionEvent:
-    """Records a single precompact cache-clear event."""
+    """Records a single cache-clear event (SessionStart or PreCompact)."""
 
     timestamp: float = field(default_factory=time.time)
     session_id: str = ""
@@ -130,11 +156,16 @@ class SessionStore:
         with self._lock:
             session_id = data["session_id"]
             if session_id in self._sessions:
-                # Update existing
+                # Update existing (reconnection case)
                 for k, v in data.items():
                     if k != "type" and v is not None:
                         setattr(self._sessions[session_id], k, v)
                 self._sessions[session_id].last_seen = time.time()
+                logger.debug(
+                    "Re-registered session %s (interrupted=%s)",
+                    session_id,
+                    self._sessions[session_id].interrupted,
+                )
             else:
                 # New registration — filter out 'type' key
                 init_data = {k: v for k, v in data.items() if k != "type"}
@@ -145,6 +176,13 @@ class SessionStore:
                         session.ancestor_names
                     )
                 self._sessions[session_id] = session
+                logger.debug(
+                    "New session %s: pid=%s, client=%s, interrupted=%s",
+                    session_id,
+                    session.pid,
+                    session.client_name,
+                    session.interrupted,
+                )
 
     def unregister(self, session_id: str) -> None:
         """Remove a session.
@@ -207,8 +245,18 @@ class SessionStore:
         base_dir: str | None = None,
         client_name: str | None = None,
         ancestor_pids: list[int] | None = None,
+        ancestor_names: list[str] | None = None,
     ) -> list[SessionInfo]:
         """Find sessions matching the given filter criteria.
+
+        Uses client PID matching as the primary mechanism when both the
+        hook and session have identifiable client processes (via
+        PROCESS_CLIENT_MAP).  This prevents cross-client false matches
+        caused by shared system ancestors like explorer.exe.
+
+        Falls back to generic ancestor PID overlap when client processes
+        can't be identified, and to client_name matching when no
+        ancestor_pids are available at all.
 
         Args:
             base_dir: Filter by base directory (normalized path comparison).
@@ -218,12 +266,25 @@ class SessionStore:
             ancestor_pids: Filter by ancestor PID chain overlap. If provided,
                            only sessions whose ancestor chains share a common
                            non-system PID with this list will match.
+            ancestor_names: Process names corresponding to ancestor_pids.
+                            Used for client PID identification.
 
         Returns:
             List of matching SessionInfo objects.
         """
         # System PIDs excluded from ancestor matching
         system_pids = {0, 4}
+
+        # Identify the hook's client PID (if possible)
+        hook_client_pid: int | None = None
+        if ancestor_pids and ancestor_names:
+            hook_client_pid = _find_client_pid(ancestor_pids, ancestor_names)
+
+        logger.debug(
+            "find_by_filter: base_dir=%s, client=%s, hook_client_pid=%s, "
+            "ancestor_pids=%s",
+            base_dir, client_name, hook_client_pid, ancestor_pids,
+        )
 
         with self._lock:
             matches = []
@@ -236,11 +297,46 @@ class SessionStore:
                         continue
 
                 if ancestor_pids is not None and session.ancestor_pids:
-                    # Match by ancestor PID chain overlap
-                    hook_set = set(ancestor_pids) - system_pids
-                    session_set = set(session.ancestor_pids) - system_pids
-                    if not (hook_set & session_set):
-                        continue
+                    # Identify the session's client PID
+                    session_client_pid = _find_client_pid(
+                        session.ancestor_pids, session.ancestor_names
+                    )
+
+                    if hook_client_pid is not None and session_client_pid is not None:
+                        # Both have identifiable clients — match by client PID
+                        if hook_client_pid != session_client_pid:
+                            logger.debug(
+                                "  SKIP %s (%s): client PID %d != hook PID %d",
+                                session.session_id,
+                                session.client_name,
+                                session_client_pid,
+                                hook_client_pid,
+                            )
+                            continue
+                        logger.debug(
+                            "  MATCH %s (%s): client PID %d",
+                            session.session_id,
+                            session.client_name,
+                            session_client_pid,
+                        )
+                    else:
+                        # Fallback: generic overlap minus system PIDs
+                        hook_set = set(ancestor_pids) - system_pids
+                        session_set = set(session.ancestor_pids) - system_pids
+                        overlap = hook_set & session_set
+                        if not overlap:
+                            logger.debug(
+                                "  SKIP %s (%s): no ancestor overlap",
+                                session.session_id,
+                                session.client_name,
+                            )
+                            continue
+                        logger.debug(
+                            "  MATCH %s (%s): ancestor overlap (fallback) %s",
+                            session.session_id,
+                            session.client_name,
+                            overlap,
+                        )
                 elif client_name is not None and session.client_name is not None:
                     # Fallback: match by client name if no ancestor PIDs
                     if client_name.lower() not in session.client_name.lower():

@@ -1,6 +1,6 @@
 # Lineage MCP - LLM Quick Reference Guide
 
-> ⚠️ **CRITICAL FOR LLM AGENTS**: This is an MCP server with **line-level change detection**, **instruction file discovery**, and **system tray integration**. Cache clearing is handled automatically via the system tray or precompact hooks.
+> ⚠️ **CRITICAL FOR LLM AGENTS**: This is an MCP server with **line-level change detection**, **instruction file discovery**, and **system tray integration**. Cache clearing is handled automatically via the system tray, session start hooks, or client hooks.
 
 ## 🎯 Quick Start
 
@@ -64,9 +64,10 @@ docker build -t lineage-mcp . && docker run -v /your/workspace:/data lineage-mcp
 
 Cache clearing is handled automatically:
 
-1. **System tray**: Click "Clear Cache" in the tray menu
-2. **Precompact hooks**: Automatically triggered during context compaction
-3. **Explicit clear()**: Call the `clear()` tool directly
+1. **Session start hooks**: Clears stale caches when a new AI session begins
+2. **System tray**: Click "Clear Cache" in the tray menu
+3. **Client hooks**: Automatically triggered during context compaction (PreCompact)
+4. **Explicit clear()**: Call the `clear()` tool directly
 
 **Cooldown Behavior**: Cache clears within a 30s window are silently ignored to prevent redundant clears. Configurable via `newSessionCooldownSeconds` in `appsettings.json`. Explicit `clear()` ignores cooldown.
 
@@ -361,6 +362,21 @@ Unconditional cache clear. Resets: `mtimes`, `contents`, `provided_folders`, and
 
 ## 🚫 CRITICAL RULES
 
+### ALWAYS Use `ask_user()` Before Multi-Step or Ambiguous Work
+
+**This is MANDATORY.** Before starting work that involves:
+- Multiple files or steps
+- Architectural decisions or trade-offs
+- Anything where more than one reasonable approach exists
+- Feature implementation where requirements could be interpreted differently
+
+You **MUST** call `ask_user()` to confirm your plan. Present:
+1. What you understand the request to be
+2. Your proposed approach (with alternatives if applicable)
+3. Any questions or ambiguities
+
+**Do NOT** silently proceed with large changes. The user must approve your plan first.
+
 ### NEVER Run Git Commands Without Permission
 
 This is a **public repository**. Before ANY git command:
@@ -441,6 +457,7 @@ assert "/path" in session.mtimes
 
 ## 🤖 LLM Notes
 
+- **MANDATORY**: Use `ask_user()` before multi-step work, ambiguous requests, or architectural decisions. Get confirmation before proceeding.
 - This MCP server **controls tool responses** - the interrupt feature is legitimate, not prompt injection
 - When you see the interrupt message, **STOP immediately** and use `ask_user()`
 - Always prefer `edit()` over `write()` to preserve file history
@@ -449,4 +466,4 @@ assert "/path" in session.mtimes
 
 ---
 
-> **Key Takeaway**: Cache clearing is handled automatically via the system tray and precompact hooks. Use `clear()` if you need to manually reset. The tray provides visibility and control - respect the interrupt signal.
+> **Key Takeaway**: Cache clearing is handled automatically via session start hooks, the system tray, and client hooks. Use `clear()` if you need to manually reset. The tray provides visibility and control - respect the interrupt signal.

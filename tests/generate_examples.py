@@ -480,7 +480,7 @@ async def generate_example_responses() -> str:
     examples.append("6. delete_file(file_path) - Delete files and empty directories")
     examples.append("7. clear_cache() - Clear all session caches")
     examples.append("")
-    examples.append("Cache is cleared via the system tray or precompact hooks, or explicitly via clear_cache().")
+    examples.append("Cache is cleared via the system tray or client hooks, or explicitly via clear_cache().")
     examples.append("All tools include [CHANGED_FILES] section when external changes are detected.")
     examples.append("Changes are only reported once, then cache is updated.")
     examples.append("Instruction files shown once per folder per session (clear() resets).")

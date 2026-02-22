@@ -219,3 +219,200 @@ class TestHandleCommandCooldown:
         s.clear()
         assert s.new_session_clear_count == 2
         assert len(s.mtimes) == 0
+
+
+class TestInterruptStateOnReconnect:
+    """Tests that interrupt state is transmitted on tray reconnect."""
+
+    def _get_test_pipe_address(self):
+        if sys.platform == "win32":
+            return rf"\\.\pipe\lineage-mcp-test-interrupt-{os.getpid()}-{int(time.time() * 1000)}"
+        else:
+            import tempfile
+
+            return os.path.join(
+                tempfile.gettempdir(),
+                f"lineage-mcp-test-interrupt-{os.getpid()}.sock",
+            )
+
+    def test_connect_includes_interrupted_false(self):
+        """Registration message includes interrupted=False by default."""
+        from multiprocessing.connection import Listener
+        from session_state import session
+
+        address = self._get_test_pipe_address()
+        authkey = b"lineage-mcp-tray-v1"
+        received = []
+        old_interrupted = session.interrupted
+        session.interrupted = False
+
+        def server():
+            with Listener(address, authkey=authkey) as listener:
+                with listener.accept() as conn:
+                    msg = conn.recv()
+                    received.append(msg)
+                    time.sleep(0.3)
+
+        t = threading.Thread(target=server, daemon=True)
+        t.start()
+        time.sleep(0.2)
+
+        import tray_client
+
+        orig_addr = tray_client.PIPE_ADDRESS
+        tray_client.PIPE_ADDRESS = address
+
+        try:
+            client = TrayClient("C:\\test-project")
+            result = client.connect()
+            t.join(timeout=3)
+            if result:
+                assert len(received) >= 1
+                assert received[0]["type"] == "register"
+                assert "interrupted" in received[0]
+                assert received[0]["interrupted"] is False
+                client.disconnect()
+        finally:
+            tray_client.PIPE_ADDRESS = orig_addr
+            session.interrupted = old_interrupted
+
+    def test_connect_includes_interrupted_true_when_session_interrupted(self):
+        """Registration message includes interrupted=True when session is interrupted."""
+        from multiprocessing.connection import Listener
+        from session_state import session
+
+        address = self._get_test_pipe_address()
+        authkey = b"lineage-mcp-tray-v1"
+        received = []
+        old_interrupted = session.interrupted
+        session.interrupted = True
+
+        def server():
+            with Listener(address, authkey=authkey) as listener:
+                with listener.accept() as conn:
+                    msg = conn.recv()
+                    received.append(msg)
+                    time.sleep(0.3)
+
+        t = threading.Thread(target=server, daemon=True)
+        t.start()
+        time.sleep(0.2)
+
+        import tray_client
+
+        orig_addr = tray_client.PIPE_ADDRESS
+        tray_client.PIPE_ADDRESS = address
+
+        try:
+            client = TrayClient("C:\\test-project")
+            result = client.connect()
+            t.join(timeout=3)
+            if result:
+                assert len(received) >= 1
+                assert received[0]["type"] == "register"
+                assert received[0]["interrupted"] is True
+                client.disconnect()
+        finally:
+            tray_client.PIPE_ADDRESS = orig_addr
+            session.interrupted = old_interrupted
+
+
+class TestSessionStoreInterruptOnRegister:
+    """Tests that SessionStore preserves interrupt state from registration."""
+
+    def test_register_with_interrupted_true(self):
+        """New session with interrupted=True gets stored correctly."""
+        sys.path.insert(
+            0,
+            str(Path(__file__).parent.parent / "lineage-mcp-tray"),
+        )
+        from lineage_tray.session_store import SessionStore
+
+        store = SessionStore()
+        store.register(
+            {
+                "session_id": "s1",
+                "pid": 1234,
+                "base_dir": "C:\\proj",
+                "started_at": time.time(),
+                "interrupted": True,
+            }
+        )
+        s = store.get("s1")
+        assert s is not None
+        assert s.interrupted is True
+
+    def test_register_with_interrupted_false(self):
+        """New session with interrupted=False is not interrupted."""
+        sys.path.insert(
+            0,
+            str(Path(__file__).parent.parent / "lineage-mcp-tray"),
+        )
+        from lineage_tray.session_store import SessionStore
+
+        store = SessionStore()
+        store.register(
+            {
+                "session_id": "s1",
+                "pid": 1234,
+                "base_dir": "C:\\proj",
+                "started_at": time.time(),
+                "interrupted": False,
+            }
+        )
+        s = store.get("s1")
+        assert s is not None
+        assert s.interrupted is False
+
+    def test_register_without_interrupted_defaults_false(self):
+        """Session registered without interrupted field defaults to False."""
+        sys.path.insert(
+            0,
+            str(Path(__file__).parent.parent / "lineage-mcp-tray"),
+        )
+        from lineage_tray.session_store import SessionStore
+
+        store = SessionStore()
+        store.register(
+            {
+                "session_id": "s1",
+                "pid": 1234,
+                "base_dir": "C:\\proj",
+                "started_at": time.time(),
+            }
+        )
+        s = store.get("s1")
+        assert s is not None
+        assert s.interrupted is False
+
+    def test_reregister_updates_interrupted(self):
+        """Re-registering a session updates the interrupted field."""
+        sys.path.insert(
+            0,
+            str(Path(__file__).parent.parent / "lineage-mcp-tray"),
+        )
+        from lineage_tray.session_store import SessionStore
+
+        store = SessionStore()
+        store.register(
+            {
+                "session_id": "s1",
+                "pid": 1234,
+                "base_dir": "C:\\proj",
+                "started_at": time.time(),
+                "interrupted": False,
+            }
+        )
+        assert store.get("s1").interrupted is False
+
+        # Re-register with interrupted=True (simulates reconnect after tray restart)
+        store.register(
+            {
+                "session_id": "s1",
+                "pid": 1234,
+                "base_dir": "C:\\proj",
+                "started_at": time.time(),
+                "interrupted": True,
+            }
+        )
+        assert store.get("s1").interrupted is True

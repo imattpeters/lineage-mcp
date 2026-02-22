@@ -9,7 +9,7 @@ from typing import Dict, List
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from config import ALLOW_FULL_PATHS, DEBUG_CLIENT_INFO, ENABLE_MULTI_EDIT, INTERRUPT_MESSAGE, get_read_char_limit
+from config import ALLOW_FULL_PATHS, DEBUG_CLIENT_INFO, ENABLE_MULTI_EDIT, INTERRUPT_MESSAGE, get_read_char_limit, get_response_footer
 from path_utils import init_base_dir_from_args, set_allow_full_paths
 from session_state import session
 from tools import (
@@ -22,7 +22,7 @@ from tools import (
     search_files,
     write_file,
 )
-from tray_client import init_tray_client, update_tray_files_tracked, update_tray_first_call
+from tray_client import init_tray_client, log_tool_call
 
 # Initialize base directory from command line argument
 init_base_dir_from_args()
@@ -49,6 +49,14 @@ def _get_client_name(ctx: Context | None) -> str | None:
         pass
     return None
 
+def _append_footer(result: str, client_name: str | None = None) -> str:
+    """Append the configured responseFooter to a tool result, if non-empty."""
+    footer = get_response_footer(client_name)
+    if not footer:
+        return result
+    return result + "\n\n---\n" + footer
+
+
 def _check_interrupted() -> str | None:
     """Check if the session is in interrupted mode.
 
@@ -63,25 +71,6 @@ def _check_interrupted() -> str | None:
         return INTERRUPT_MESSAGE
     return None
 
-def _tray_notify_tool_call(
-    tool_name: str, args_summary: str, ctx: Context | None = None
-) -> None:
-    """Notify the tray about a tool call (first call captures client info).
-
-    Also updates the files tracked count.
-
-    Args:
-        tool_name: Name of the tool being called.
-        args_summary: Brief summary of tool arguments.
-        ctx: MCP Context, if available.
-    """
-    try:
-        client_name = _get_client_name(ctx)
-        update_tray_first_call(tool_name, args_summary, client_name)
-        update_tray_files_tracked(len(session.mtimes), tool_name, args_summary)
-    except Exception:
-        pass  # Tray updates are best-effort
-
 # Register tools with MCP server
 @mcp.tool()
 async def list(path: str = "", ctx: Context = None) -> str:
@@ -95,13 +84,12 @@ async def list(path: str = "", ctx: Context = None) -> str:
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
-    _tray_notify_tool_call("list", path, ctx)
+    log_tool_call("list", ctx=ctx, path=path)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
     result = await list_files(path)
-    update_tray_files_tracked(len(session.mtimes))
-    return result
+    return _append_footer(result, _get_client_name(ctx))
 
 @mcp.tool()
 async def search(pattern: str, path: str = "", ctx: Context = None) -> str:
@@ -120,12 +108,12 @@ async def search(pattern: str, path: str = "", ctx: Context = None) -> str:
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
-    _tray_notify_tool_call("search", pattern, ctx)
+    log_tool_call("search", ctx=ctx, pattern=pattern, path=path)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
     result = await search_files(pattern, path)
-    return result
+    return _append_footer(result, _get_client_name(ctx))
 
 @mcp.tool()
 async def read(
@@ -171,7 +159,9 @@ async def read(
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
-    _tray_notify_tool_call("read", file_path, ctx)
+    log_tool_call("read", ctx=ctx, file_path=file_path,
+                  show_line_numbers=show_line_numbers,
+                  offset=offset, limit=limit, cursor=cursor)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
@@ -186,8 +176,7 @@ async def read(
         debug_prefix = f"[Client: {client_name or 'unknown'} | readCharLimit: {char_limit}]\n"
         result = debug_prefix + result
 
-    update_tray_files_tracked(len(session.mtimes))
-    return result
+    return _append_footer(result, client_name)
 
 @mcp.tool()
 async def write(file_path: str, content: str, ctx: Context = None) -> str:
@@ -202,13 +191,12 @@ async def write(file_path: str, content: str, ctx: Context = None) -> str:
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
-    _tray_notify_tool_call("write", file_path, ctx)
+    log_tool_call("write", ctx=ctx, file_path=file_path, content=content)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
     result = await write_file(file_path, content)
-    update_tray_files_tracked(len(session.mtimes))
-    return result
+    return _append_footer(result, _get_client_name(ctx))
 
 @mcp.tool()
 async def edit(
@@ -234,13 +222,13 @@ async def edit(
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
-    _tray_notify_tool_call("edit", file_path, ctx)
+    log_tool_call("edit", ctx=ctx, file_path=file_path, old_string=old_string,
+                  new_string=new_string, replace_all=replace_all)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
     result = await edit_file(file_path, old_string, new_string, replace_all)
-    update_tray_files_tracked(len(session.mtimes))
-    return result
+    return _append_footer(result, _get_client_name(ctx))
 
 if ENABLE_MULTI_EDIT:
 
@@ -268,13 +256,12 @@ if ENABLE_MULTI_EDIT:
             If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
             operations immediately and use ask_user() before proceeding.
         """
-        _tray_notify_tool_call("multi_edit", f"{len(edits)} edits", ctx)
+        log_tool_call("multi_edit", ctx=ctx, edits=edits)
         interrupted = _check_interrupted()
         if interrupted:
             return interrupted
         result = await multi_edit_file(edits)
-        update_tray_files_tracked(len(session.mtimes))
-        return result
+        return _append_footer(result, _get_client_name(ctx))
 
 
 @mcp.tool()
@@ -289,29 +276,29 @@ async def delete(file_path: str, ctx: Context = None) -> str:
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
-    _tray_notify_tool_call("delete", file_path, ctx)
+    log_tool_call("delete", ctx=ctx, file_path=file_path)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
     result = await delete_file(file_path)
-    update_tray_files_tracked(len(session.mtimes))
-    return result
+    return _append_footer(result, _get_client_name(ctx))
 
 
 @mcp.tool()
-async def clear() -> str:
+async def clear(ctx: Context = None) -> str:
     """Clear all session caches.
 
     Resets file tracking and instruction file tracking
     (provided_folders). Use when instruction files need to be re-provided
     after context compaction.
 
-    Cache is also cleared automatically via the system tray or precompact hooks.
+    Cache is also cleared automatically via the system tray or client hooks (SessionStart, PreCompact).
 
     Returns:
         Success message confirming cache was cleared
     """
-    return await clear_cache()
+    result = await clear_cache()
+    return _append_footer(result, _get_client_name(ctx))
 
 def main():
     """Entry point for CLI: lineage-mcp /path/to/base/dir

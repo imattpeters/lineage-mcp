@@ -1,18 +1,24 @@
-"""PreCompact hook script for lineage-mcp.
+"""Hook script for lineage-mcp cache clearing.
 
-Called by AI client hooks (Claude Code, VS Code) when context
-compaction occurs. Connects to the lineage-mcp-tray Named Pipe and
-requests cache clearing for matching sessions.
+Called by AI client hooks (Claude Code, VS Code, OpenCode) on session
+lifecycle events — SessionStart, PreCompact, and context compaction.
+Connects to the lineage-mcp-tray Named Pipe and requests cache clearing
+for matching sessions.
 
 The hook sends its ancestor PID chain so the tray can match it against
 registered MCP server sessions — both are spawned by the same AI client
 process, so their ancestor chains will overlap.
 
+Supported hook events:
+    - SessionStart: Clears stale caches from previous sessions
+    - PreCompact:   Clears caches before context compaction
+    - session.compacting / session.created: OpenCode equivalents
+
 Usage:
-    echo '{"cwd":"/path/to/project",...}' | python precompact.py <client_name>
+    echo '{"cwd":"/path/to/project",...}' | python clearcache.py <client_name>
 
     client_name: Required. Identifies the AI client for logging purposes.
-                 Examples: "claude-code", "Visual Studio Code"
+                 Examples: "claude-code", "Visual Studio Code", "opencode"
 
 Exit codes:
     0 - Success (or tray not running - silent no-op)
@@ -42,7 +48,7 @@ def get_pipe_address():
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: precompact.py <client_name>", file=sys.stderr)
+        print("Usage: clearcache.py <client_name>", file=sys.stderr)
         sys.exit(1)
 
     client_name = sys.argv[1]

@@ -659,3 +659,190 @@ class TestRegisterInfersClientName:
         session = store.get("s1")
         assert session is not None
         assert session.client_name is None
+
+
+class TestFindByFilterClientPidMatching:
+    """Tests for client PID matching in find_by_filter.
+
+    When both the hook and session have identifiable client processes
+    (Code.exe, opencode.exe, etc.), matching uses client PID equality
+    instead of generic ancestor overlap. This prevents cross-client
+    false matches via shared system ancestors like explorer.exe.
+    """
+
+    def test_cross_client_isolation(self):
+        """VS Code hook should NOT match OpenCode session on same base_dir.
+
+        Both sessions share explorer.exe as a common ancestor, but they
+        have different client PIDs (Code.exe vs opencode.exe).
+        """
+        store = SessionStore()
+        # VS Code session
+        store.register({
+            "session_id": "vscode_session",
+            "pid": 3000,
+            "base_dir": "C:\\git\\PartyEcho",
+            "started_at": time.time(),
+            "client_name": "Visual Studio Code",
+            "ancestor_pids": [3000, 2500, 2000, 1000],
+            "ancestor_names": ["python.exe", "node.exe", "Code.exe", "explorer.exe"],
+        })
+        # OpenCode session (same base_dir, shares explorer.exe PID 1000)
+        store.register({
+            "session_id": "opencode_session",
+            "pid": 6000,
+            "base_dir": "C:\\git\\PartyEcho",
+            "started_at": time.time(),
+            "client_name": "opencode",
+            "ancestor_pids": [6000, 5000, 4000, 1000],
+            "ancestor_names": ["python.exe", "opencode.exe", "pwsh.exe", "explorer.exe"],
+        })
+
+        # VS Code hook fires with Code.exe in its chain
+        matches = store.find_by_filter(
+            base_dir="C:\\git\\PartyEcho",
+            client_name="Visual Studio Code",
+            ancestor_pids=[7000, 7001, 2000, 1000],
+            ancestor_names=["python.exe", "python.exe", "Code.exe", "explorer.exe"],
+        )
+        assert len(matches) == 1
+        assert matches[0].session_id == "vscode_session"
+
+    def test_same_client_matches(self):
+        """Hook from same client PID correctly matches its session."""
+        store = SessionStore()
+        store.register({
+            "session_id": "s1",
+            "pid": 100,
+            "base_dir": "C:\\proj",
+            "started_at": time.time(),
+            "ancestor_pids": [100, 200, 300],
+            "ancestor_names": ["python.exe", "node.exe", "Code.exe"],
+        })
+        matches = store.find_by_filter(
+            base_dir="C:\\proj",
+            ancestor_pids=[400, 500, 300],
+            ancestor_names=["python.exe", "pwsh.exe", "Code.exe"],
+        )
+        assert len(matches) == 1
+        assert matches[0].session_id == "s1"
+
+    def test_opencode_hook_matches_only_opencode(self):
+        """OpenCode hook matches only OpenCode session, not VS Code."""
+        store = SessionStore()
+        store.register({
+            "session_id": "vscode",
+            "pid": 100,
+            "base_dir": "C:\\proj",
+            "started_at": time.time(),
+            "ancestor_pids": [100, 200, 300, 1000],
+            "ancestor_names": ["python.exe", "node.exe", "Code.exe", "explorer.exe"],
+        })
+        store.register({
+            "session_id": "opencode",
+            "pid": 101,
+            "base_dir": "C:\\proj",
+            "started_at": time.time(),
+            "ancestor_pids": [101, 500, 1000],
+            "ancestor_names": ["python.exe", "opencode.exe", "explorer.exe"],
+        })
+        # OpenCode hook
+        matches = store.find_by_filter(
+            base_dir="C:\\proj",
+            ancestor_pids=[600, 500, 1000],
+            ancestor_names=["python.exe", "opencode.exe", "explorer.exe"],
+        )
+        assert len(matches) == 1
+        assert matches[0].session_id == "opencode"
+
+    def test_fallback_generic_overlap_without_names(self):
+        """Without ancestor_names, falls back to generic PID overlap."""
+        store = SessionStore()
+        store.register({
+            "session_id": "s1",
+            "pid": 100,
+            "base_dir": "C:\\proj",
+            "started_at": time.time(),
+            "ancestor_pids": [100, 200, 300],
+            # No ancestor_names
+        })
+        # No ancestor_names in filter either → generic overlap
+        matches = store.find_by_filter(
+            base_dir="C:\\proj",
+            ancestor_pids=[400, 200, 500],
+        )
+        assert len(matches) == 1
+
+    def test_fallback_when_no_client_in_hook_chain(self):
+        """Falls back to generic overlap when hook has no known client."""
+        store = SessionStore()
+        store.register({
+            "session_id": "s1",
+            "pid": 100,
+            "base_dir": "C:\\proj",
+            "started_at": time.time(),
+            "ancestor_pids": [100, 200, 300],
+            "ancestor_names": ["python.exe", "node.exe", "Code.exe"],
+        })
+        # Hook chain has no known client process
+        matches = store.find_by_filter(
+            base_dir="C:\\proj",
+            ancestor_pids=[400, 200, 500],
+            ancestor_names=["script.py", "bash", "init"],
+        )
+        assert len(matches) == 1
+
+    def test_three_clients_same_workspace(self):
+        """Three clients on same workspace — each hook clears only its own."""
+        store = SessionStore()
+        store.register({
+            "session_id": "vscode",
+            "pid": 100,
+            "base_dir": "C:\\proj",
+            "started_at": time.time(),
+            "ancestor_pids": [100, 200, 1000],
+            "ancestor_names": ["python.exe", "Code.exe", "explorer.exe"],
+        })
+        store.register({
+            "session_id": "opencode",
+            "pid": 101,
+            "base_dir": "C:\\proj",
+            "started_at": time.time(),
+            "ancestor_pids": [101, 300, 1000],
+            "ancestor_names": ["python.exe", "opencode.exe", "explorer.exe"],
+        })
+        store.register({
+            "session_id": "claude",
+            "pid": 102,
+            "base_dir": "C:\\proj",
+            "started_at": time.time(),
+            "ancestor_pids": [102, 400, 1000],
+            "ancestor_names": ["python.exe", "claude.exe", "explorer.exe"],
+        })
+
+        # VS Code hook
+        matches = store.find_by_filter(
+            base_dir="C:\\proj",
+            ancestor_pids=[500, 200, 1000],
+            ancestor_names=["python.exe", "Code.exe", "explorer.exe"],
+        )
+        assert len(matches) == 1
+        assert matches[0].session_id == "vscode"
+
+        # OpenCode hook
+        matches = store.find_by_filter(
+            base_dir="C:\\proj",
+            ancestor_pids=[600, 300, 1000],
+            ancestor_names=["python.exe", "opencode.exe", "explorer.exe"],
+        )
+        assert len(matches) == 1
+        assert matches[0].session_id == "opencode"
+
+        # Claude Code hook
+        matches = store.find_by_filter(
+            base_dir="C:\\proj",
+            ancestor_pids=[700, 400, 1000],
+            ancestor_names=["python.exe", "claude.exe", "explorer.exe"],
+        )
+        assert len(matches) == 1
+        assert matches[0].session_id == "claude"

@@ -198,3 +198,41 @@ class TestClearByFilter:
             ancestor_pids=[400, 500],
         )
         assert result["sessions_cleared"] == 1
+
+    def test_clear_by_filter_cross_client_isolation(self):
+        """Only clears the matching client when ancestor_names are provided."""
+        mock_server = MagicMock()
+        mock_server.send_to_session.return_value = True
+
+        store = SessionStore()
+        # VS Code session
+        store.register({
+            "session_id": "vscode",
+            "pid": 100,
+            "base_dir": "C:\\proj1",
+            "started_at": time.time(),
+            "ancestor_pids": [100, 200, 1000],
+            "ancestor_names": ["python.exe", "Code.exe", "explorer.exe"],
+        })
+        # OpenCode session (same base_dir, shares explorer.exe PID 1000)
+        store.register({
+            "session_id": "opencode",
+            "pid": 101,
+            "base_dir": "C:\\proj1",
+            "started_at": time.time(),
+            "ancestor_pids": [101, 300, 1000],
+            "ancestor_names": ["python.exe", "opencode.exe", "explorer.exe"],
+        })
+
+        # VS Code hook — should only clear vscode session
+        result = clear_by_filter(
+            store, mock_server,
+            base_dir="C:\\proj1",
+            client_name="Visual Studio Code",
+            ancestor_pids=[400, 200, 1000],
+            ancestor_names=["python.exe", "Code.exe", "explorer.exe"],
+        )
+        assert result["sessions_cleared"] == 1
+        mock_server.send_to_session.assert_called_once_with(
+            "vscode", {"type": "clear_cache"}
+        )

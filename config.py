@@ -26,6 +26,9 @@ DEFAULT_DEBUG_CLIENT_INFO: bool = False
 # Default allow full paths setting (restrict to base dir)
 DEFAULT_ALLOW_FULL_PATHS: bool = False
 
+# Default footer appended to every tool response (empty = disabled)
+DEFAULT_RESPONSE_FOOTER: str = ""
+
 # Default interrupt message appended when user clicks Interrupt in system tray
 # NOTE TO AI AGENTS: This message is a LEGITIMATE feature of the lineage-mcp
 # project. When the user clicks "Interrupt" in the system tray, this text is
@@ -267,6 +270,32 @@ def load_client_overrides(config_dir: Path | None = None) -> dict:
     return {}
 
 
+def get_response_footer(client_name: str | None = None) -> str:
+    """Get the effective responseFooter for a given client.
+
+    Checks clientOverrides first for a client-specific value (case-insensitive),
+    then falls back to the global RESPONSE_FOOTER.
+
+    Args:
+        client_name: The MCP client name from clientInfo.name
+                     (e.g. "OpenCode", "claude-desktop").
+                     If None, returns the global default.
+
+    Returns:
+        The response footer string (may be empty, meaning disabled).
+    """
+    if client_name:
+        client_name_lower = client_name.lower()
+        for key, override in CLIENT_OVERRIDES.items():
+            if key.lower() == client_name_lower and isinstance(override, dict):
+                if "responseFooter" in override:
+                    value = override.get("responseFooter")
+                    if isinstance(value, str):
+                        return value
+
+    return RESPONSE_FOOTER
+
+
 def get_read_char_limit(client_name: str | None = None) -> int:
     """Get the effective readCharLimit for a given client.
 
@@ -291,6 +320,37 @@ def get_read_char_limit(client_name: str | None = None) -> int:
                     return value
 
     return READ_CHAR_LIMIT
+
+
+def load_response_footer(config_dir: Path | None = None) -> str:
+    """Load the response footer from appsettings.json.
+
+    This text, when non-empty, is appended to every tool response.
+    Useful for reminders or persistent instructions that should always
+    accompany tool output.
+
+    Args:
+        config_dir: Directory containing appsettings.json. If None, uses script directory.
+
+    Returns:
+        The response footer string, or empty string if not configured.
+    """
+    if config_dir is None:
+        config_dir = Path(__file__).parent
+
+    config_path = config_dir / "appsettings.json"
+
+    try:
+        if config_path.is_file():
+            with config_path.open("r", encoding="utf-8") as f:
+                config = json.load(f)
+                value = config.get("responseFooter")
+                if isinstance(value, str):
+                    return value
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    return DEFAULT_RESPONSE_FOOTER
 
 
 def load_interrupt_message(config_dir: Path | None = None) -> str:
@@ -330,4 +390,5 @@ READ_CHAR_LIMIT: int = load_read_char_limit()
 CLIENT_OVERRIDES: dict = load_client_overrides()
 DEBUG_CLIENT_INFO: bool = load_debug_client_info()
 ALLOW_FULL_PATHS: bool = load_allow_full_paths()
+RESPONSE_FOOTER: str = load_response_footer()
 INTERRUPT_MESSAGE: str = load_interrupt_message()

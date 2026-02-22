@@ -2,9 +2,9 @@
  * Client for communicating with lineage-mcp-tray via Named Pipe.
  *
  * Connects to the tray's multiprocessing.connection Listener and
- * sends clear_by_filter messages when compaction occurs.
+ * sends clear_by_filter messages when session lifecycle events occur.
  *
- * Uses the Python hook script (hooks/precompact.py) via child_process
+ * Uses the Python hook script (hooks/clearcache.py) via child_process
  * to handle the multiprocessing.connection protocol from Node.js.
  */
 
@@ -33,16 +33,18 @@ export interface TrayResponse {
  *
  * @param baseDir - The project base directory
  * @param clientName - The client identifier (e.g., "opencode")
+ * @param hookEvent - The hook event name (e.g., "SessionStart", "PreCompact")
  * @returns Promise resolving to number of sessions cleared
  */
 export async function sendClearByFilter(
   baseDir: string,
-  clientName: string
+  clientName: string,
+  hookEvent: string = "PreCompact"
 ): Promise<number> {
   return new Promise((resolve_val, reject) => {
     // Path to the Python hook script
     // From dist/tray-client.js → plugins/opencode/ → plugins/ → lineage-mcp repo root
-    const scriptPath = resolve(__dirname, "../../../hooks/precompact.py");
+    const scriptPath = resolve(__dirname, "../../../hooks/clearcache.py");
 
     // Spawn Python process
     const python = spawn("python", [scriptPath, clientName], {
@@ -79,7 +81,7 @@ export async function sendClearByFilter(
     // Send hook input JSON to stdin
     const hookInput = JSON.stringify({
       cwd: baseDir,
-      hook_event_name: "PreCompact",
+      hook_event_name: hookEvent,
       client: clientName,
     });
 

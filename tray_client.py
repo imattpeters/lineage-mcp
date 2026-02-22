@@ -19,6 +19,77 @@ from pathlib import Path
 from hooks.pid_utils import get_ancestor_chain
 
 
+def _format_tool_arg(key: str, value: object, max_preview_len: int = 20) -> str:
+    """Format a single tool argument for logging.
+    
+    Control parameters (flags, counts, limits) are shown in full.
+    Data parameters (strings, paths) show first N characters + length.
+    
+    Args:
+        key: Parameter name
+        value: Parameter value
+        max_preview_len: Max characters to show for string/data params
+        
+    Returns:
+        Formatted string like 'key=value' or 'key="preview..." (len chars)'
+    """
+    # Skip None values
+    if value is None:
+        return f"{key}=None"
+    
+    # Control parameters - show in full
+    if key in ("replace_all", "show_line_numbers", "cursor", "offset", "limit", 
+               "timeout", "max_results", "maxlen"):
+        return f"{key}={value}"
+    
+    # Booleans - show in full
+    if isinstance(value, bool):
+        return f"{key}={value}"
+    
+    # Numbers - show in full
+    if isinstance(value, (int, float)):
+        return f"{key}={value}"
+    
+    # Lists/arrays - show type and count
+    if isinstance(value, (list, dict)):
+        return f"{key}(type={type(value).__name__}, len={len(value)})"
+    
+    # Strings - preview first N chars
+    s = str(value)
+    if len(s) > max_preview_len:
+        char_count = len(s)
+        preview = s[:max_preview_len]
+        return f'{key}="{preview}..." ({char_count} chars)'
+    else:
+        return f'{key}="{s}"'
+
+
+def format_tool_call(tool_name: str, **kwargs) -> str:
+    """Format a tool call with parameters for logging.
+    
+    Args:
+        tool_name: Name of the tool
+        **kwargs: Tool parameters
+        
+    Returns:
+        Formatted string like 'read: src/app.py, offset=100, limit=50'
+    """
+    # Extract file_path or pattern as the primary identifier
+    file_path = kwargs.pop("file_path", None) or kwargs.pop("pattern", None)
+    
+    formatted_args = []
+    if file_path:
+        formatted_args.append(str(file_path))
+    
+    # Format remaining args
+    for key, value in kwargs.items():
+        if key not in ("ctx",):  # Skip context
+            formatted_args.append(_format_tool_arg(key, value))
+    
+    args_str = ", ".join(formatted_args)
+    return f"{tool_name}: {args_str}" if args_str else tool_name
+
+
 def get_pipe_address() -> str:
     """Get the platform-appropriate pipe address.
 
@@ -71,6 +142,14 @@ class TrayClient:
             self.conn = Client(PIPE_ADDRESS, authkey=PIPE_AUTHKEY)
             self._connected = True
 
+            # Get current interrupt state so tray picks it up on (re)connect
+            interrupted = False
+            try:
+                from session_state import session
+                interrupted = session.interrupted
+            except Exception:
+                pass
+
             # Send registration
             ancestor_chain = get_ancestor_chain()
             self.conn.send(
@@ -85,6 +164,7 @@ class TrayClient:
                     "files_tracked": 0,
                     "ancestor_pids": [pid for pid, _ in ancestor_chain],
                     "ancestor_names": [name for _, name in ancestor_chain],
+                    "interrupted": interrupted,
                 }
             )
 
@@ -200,6 +280,25 @@ class TrayClient:
         except Exception:
             self._connected = False
 
+    def send_message(self, msg: dict) -> None:
+        """Send an arbitrary message to the tray.
+
+        Fire-and-forget. If disconnected, attempts to reconnect first.
+
+        Args:
+            msg: Message dict to send.
+        """
+        if not self._connected:
+            self._try_reconnect()
+        if not self._connected:
+            return
+        try:
+            self.conn.send({**msg, "session_id": self.session_id})
+        except (OSError, BrokenPipeError):
+            self._connected = False
+        except Exception:
+            self._connected = False
+
     def disconnect(self) -> None:
         """Clean disconnect from tray. Safe to call multiple times."""
         was_connected = self._connected
@@ -288,6 +387,89 @@ _client_name_sent = False
 _known_generation: int = 0
 
 
+def _extract_client_name(ctx: object | None) -> str | None:
+    """Extract the MCP client name from a Context object.
+
+    Duck-typed to avoid importing mcp types into this module.
+
+    Args:
+        ctx: MCP Context object (or None).
+
+    Returns:
+        Client name string, or None.
+    """
+    try:
+        if ctx and ctx.session and ctx.session.client_params:
+            return ctx.session.client_params.clientInfo.name
+    except (AttributeError, TypeError):
+        pass
+    return None
+
+
+def log_tool_call(tool_name: str, *, ctx: object | None = None, **kwargs) -> None:
+    """Log a tool call with full parameters to the tray.
+
+    Also sends the client name (once per session) if ctx is provided.
+
+    Args:
+        tool_name: Name of the tool (e.g. 'read', 'edit', 'write')
+        ctx: Optional MCP Context for client name extraction.
+        **kwargs: Tool arguments (file_path, pattern, content, offset, limit, etc.)
+    """
+    if _tray_client is None:
+        return
+
+    if not _tray_client._connected:
+        _tray_client._try_reconnect()
+    if not _tray_client._connected:
+        return
+
+    try:
+        # Send client name update (once per session)
+        if ctx is not None:
+            client_name = _extract_client_name(ctx)
+            update_tray_client_name(client_name)
+
+        formatted_call = format_tool_call(tool_name, **kwargs)
+        _tray_client.send_message({
+            "type": "tool_call",
+            "tool": tool_name,
+            "summary": formatted_call,
+        })
+    except Exception:
+        pass  # Tray logging is best-effort
+
+
+def update_tray_client_name(client_name: str | None) -> None:
+    """Update tray with client name (once per session).
+    
+    Args:
+        client_name: MCP client name.
+    """
+    if _tray_client is None:
+        return
+    
+    # If disconnected, try reconnect (which also re-registers)
+    if not _tray_client._connected:
+        _tray_client._try_reconnect()
+    if not _tray_client._connected:
+        return
+    
+    # Reset flags if generation changed (reconnection happened)
+    global _first_call_sent, _client_name_sent, _known_generation
+    if _tray_client._connection_generation != _known_generation:
+        _known_generation = _tray_client._connection_generation
+        _first_call_sent = False
+        _client_name_sent = False
+    
+    if not _client_name_sent and client_name:
+        _client_name_sent = True
+        try:
+            _tray_client.update(client_name=client_name)
+        except Exception:
+            pass  # Tray updates are best-effort
+
+
 def init_tray_client(base_dir: str) -> TrayClient | None:
     """Initialize and connect the tray client.
 
@@ -316,71 +498,4 @@ def init_tray_client(base_dir: str) -> TrayClient | None:
         return None
 
 
-def update_tray_first_call(
-    tool_name: str, args_summary: str, client_name: str | None = None
-) -> None:
-    """Update tray with client info on first tool call.
 
-    Sends first_call info once, and keeps retrying client_name until
-    it's successfully sent (may not be available on the very first call).
-    Resets flags on reconnect so the new tray gets current info.
-
-    Args:
-        tool_name: Name of the first tool called.
-        args_summary: Summary of the tool arguments.
-        client_name: MCP client name if available.
-    """
-    global _first_call_sent, _client_name_sent, _known_generation
-    if _tray_client is None:
-        return
-
-    # If disconnected, try reconnect (which also re-registers)
-    if not _tray_client._connected:
-        _tray_client._try_reconnect()
-    if not _tray_client._connected:
-        return
-
-    # Reset flags if generation changed (reconnection happened)
-    if _tray_client._connection_generation != _known_generation:
-        _known_generation = _tray_client._connection_generation
-        _first_call_sent = False
-        _client_name_sent = False
-
-    # Nothing left to send
-    if _first_call_sent and _client_name_sent:
-        return
-
-    update_kwargs: dict[str, object] = {}
-
-    if not _first_call_sent:
-        _first_call_sent = True
-        update_kwargs["first_call"] = f"[{tool_name}:{args_summary}]"
-
-    if not _client_name_sent and client_name:
-        _client_name_sent = True
-        update_kwargs["client_name"] = client_name
-
-    if update_kwargs:
-        _tray_client.update(**update_kwargs)
-
-
-def update_tray_files_tracked(
-    count: int, tool_name: str = "", args_summary: str = ""
-) -> None:
-    """Update the tray with the current files tracked count and last tool.
-
-    Args:
-        count: Number of files currently tracked.
-        tool_name: Name of the tool being called.
-        args_summary: Brief summary of tool arguments.
-    """
-    if _tray_client is None:
-        return
-    if not _tray_client._connected:
-        _tray_client._try_reconnect()
-    if not _tray_client._connected:
-        return
-    update_kwargs: dict[str, object] = {"files_tracked": count}
-    if tool_name:
-        update_kwargs["last_tool"] = f"[{tool_name}:{args_summary}]"
-    _tray_client.update(**update_kwargs)

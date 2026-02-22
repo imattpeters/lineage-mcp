@@ -260,10 +260,10 @@ class TestExternalCommand:
             server.stop()
 
 
-class TestPrecompactRoundtrip:
-    """Integration test for the full precompact hook roundtrip."""
+class TestClearCacheRoundtrip:
+    """Integration test for the full clear cache hook roundtrip."""
 
-    def test_precompact_roundtrip(self):
+    def test_clearcache_roundtrip(self):
         """Test: hook script -> tray -> session clear."""
         address = _test_pipe_address()
         authkey = b"test"

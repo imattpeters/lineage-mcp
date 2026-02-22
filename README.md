@@ -128,29 +128,7 @@ docker build -t lineage-mcp .
 
 ### OpenCode
 
-OpenCode uses a [plugin system](https://opencode.ai/docs/plugins) for hooks. Lineage MCP includes a plugin that automatically clears caches when context compaction occurs.
-
-OpenCode auto-loads TypeScript/JavaScript files from `.opencode/plugins/` at startup. Copy the pre-built local plugin into your project:
-
-```bash
-# From your project root
-mkdir -p .opencode/plugins
-cp /path/to/lineage-mcp/plugins/opencode/local/lineage-precompact.ts .opencode/plugins/
-```
-
-Add `@opencode-ai/plugin` to `.opencode/package.json` (for the type import):
-
-```json
-{
-  "dependencies": {
-    "@opencode-ai/plugin": "latest"
-  }
-}
-```
-
-> **Note:** Edit the `PRECOMPACT_SCRIPT` path in the copied file to point to your lineage-mcp installation.
-
-The plugin hooks into `experimental.session.compacting` and calls `hooks/precompact.py` to clear lineage-mcp caches before context compaction.
+OpenCode uses a [plugin system](https://opencode.ai/docs/plugins) for hooks. See [Client Hooks](#client-hooks) below for setup instructions.
 
 ## Tools Reference
 
@@ -310,7 +288,7 @@ LLM systems periodically "compact" or summarize conversation history to stay wit
 **Cache clearing is handled automatically:**
 
 - **System tray**: Click "Clear Cache" in the tray menu
-- **Precompact hooks**: Automatically triggered during context compaction
+- **Client hooks**: Automatically triggered on session start and during context compaction
 - **Explicit `clear()` tool**: Call directly when needed
 
 ```python
@@ -331,34 +309,65 @@ Cache clears within a 30-second window are silently ignored to prevent redundant
 - The explicit `clear()` tool always works regardless of cooldown
 - Set to `0` to disable the cooldown entirely
 
+### Client Hooks
 
-## Project Structure
+Hook scripts automatically clear lineage-mcp caches on session start and before context compaction. The tray application must be running for hooks to work — it routes cache clear requests to the correct session using ancestor PID matching.
 
+#### VS Code (Copilot Chat)
+
+Create `.github/hooks/clearcache.json` in your project root:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "python \"/path/to/lineage-mcp/hooks/clearcache.py\" \"Visual Studio Code\"",
+        "timeout": 10
+      }
+    ],
+    "PreCompact": [
+      {
+        "type": "command",
+        "command": "python \"/path/to/lineage-mcp/hooks/clearcache.py\" \"Visual Studio Code\"",
+        "timeout": 10
+      }
+    ]
+  }
+}
 ```
-lineage-mcp/
-├── lineage.py             # MCP server entry point + tool registrations
-├── config.py              # Configuration loading
-├── session_state.py       # Session-scoped caches
-├── path_utils.py          # Path security
-├── file_watcher.py        # Change detection
-├── instruction_files.py   # Instruction file discovery
-├── tools/                 # Individual tool modules
-│   ├── list_files.py
-│   ├── search_files.py
-│   ├── read_file.py
-│   ├── write_file.py
-│   ├── edit_file.py
-│   ├── multi_edit_file.py
-│   ├── delete_file.py
-│   └── clear_cache.py
-├── tests/                 # Test suite
-│   ├── conftest.py
-│   ├── test_*.py
-│   └── generate_examples.py
-├── appsettings.json       # Configuration
-├── requirements.txt       # Python dependencies
-├── Dockerfile             # Container configuration
-└── docker-compose.yml     # Orchestration
+
+> **Note:** Enable agent hooks in VS Code settings: `"chat.hooks.enabled": true`
+
+#### OpenCode
+
+Copy the pre-built plugin into your project's `.opencode/plugins/` directory:
+
+```bash
+mkdir -p .opencode/plugins
+cp /path/to/lineage-mcp/plugins/opencode/local/lineage-clearcache.ts .opencode/plugins/
+```
+
+Edit the `CLEARCACHE_SCRIPT` path in the copied file to point to your lineage-mcp installation:
+
+```typescript
+const CLEARCACHE_SCRIPT = "/path/to/lineage-mcp/hooks/clearcache.py";
+```
+
+The plugin hooks into three events:
+- **`session.created`** — Clears stale caches when a new session starts
+- **`experimental.session.compacting`** — Clears caches before context compaction
+- **`session.compacted`** — Fallback clear after compaction completes
+
+Add the plugin type dependency to `.opencode/package.json`:
+
+```json
+{
+  "dependencies": {
+    "@opencode-ai/plugin": "latest"
+  }
+}
 ```
 
 ## Security

@@ -1,13 +1,14 @@
 /**
  * lineage-mcp OpenCode Plugin
  *
- * Automatically clears lineage-mcp caches when OpenCode performs
- * context compaction, ensuring the LLM receives fresh instruction
- * files and change detection on the next tool call.
+ * Automatically clears lineage-mcp caches on session start and when
+ * OpenCode performs context compaction, ensuring the LLM receives
+ * fresh instruction files and change detection on the next tool call.
  */
 
 import type { Plugin } from "@opencode-ai/plugin";
-import { handleCompacting } from "./hooks/precompact";
+import { handleClearCache } from "./hooks/clearcache";
+import { handleSessionCreated } from "./hooks/session-start";
 
 /**
  * Main plugin export.
@@ -17,16 +18,26 @@ import { handleCompacting } from "./hooks/precompact";
 export const LineageMcpPlugin: Plugin = async (ctx) => {
   return {
     /**
+     * Fires when a new session is created.
+     *
+     * Clears stale caches from previous sessions so the LLM
+     * starts fresh with accurate file state and instruction files.
+     */
+    "session.created": async (_input: unknown, _output: unknown) => {
+      await handleSessionCreated(ctx);
+    },
+
+    /**
      * Fires before context compaction occurs.
      *
      * This is the OpenCode equivalent of Claude Code's PreCompact hook.
-     * We use this to proactively clear lineage-mcp caches.
+     * We use this to proactively clear lineage-mcp caches before compaction.
      */
     "experimental.session.compacting": async (
       _input: unknown,
       _output: unknown
     ) => {
-      await handleCompacting(ctx);
+      await handleClearCache(ctx);
     },
 
     /**

@@ -2,11 +2,15 @@
 
 from __future__ import annotations
 
+import atexit
+import logging
 import threading
 from typing import TYPE_CHECKING
 
 import pystray
 from pystray import Menu, MenuItem
+
+logger = logging.getLogger("lineage_tray.menu_builder")
 
 if TYPE_CHECKING:
     from lineage_tray.message_log import MessageLog
@@ -131,16 +135,28 @@ def _make_session_submenu(
     """
 
     def on_clear(icon: object, item: object) -> None:
-        _clear_cache(pipe_server, session)
+        try:
+            _clear_cache(pipe_server, session)
+        except Exception:
+            logger.error("Error clearing cache for %s", session.session_id, exc_info=True)
 
     def on_interrupt(icon: object, item: object) -> None:
-        _interrupt(pipe_server, session, store)
+        try:
+            _interrupt(pipe_server, session, store)
+        except Exception:
+            logger.error("Error interrupting %s", session.session_id, exc_info=True)
 
     def on_resume(icon: object, item: object) -> None:
-        _resume(pipe_server, session, store)
+        try:
+            _resume(pipe_server, session, store)
+        except Exception:
+            logger.error("Error resuming %s", session.session_id, exc_info=True)
 
     def on_copy(icon: object, item: object) -> None:
-        _copy_session_info(session)
+        try:
+            _copy_session_info(session)
+        except Exception:
+            logger.error("Error copying session info for %s", session.session_id, exc_info=True)
 
     # Show Interrupt when normal, Resume when interrupted
     if session.interrupted:
@@ -252,6 +268,9 @@ def _resume(pipe_server: PipeServer, session: SessionInfo, store: SessionStore) 
 def _copy_session_info(session: SessionInfo) -> None:
     """Copy session context information to clipboard.
 
+    Uses platform-native clipboard APIs without Tkinter to avoid
+    Tcl_AsyncDelete crashes from multiple Tk roots on different threads.
+
     Args:
         session: Session whose info to copy.
     """
@@ -269,21 +288,63 @@ def _copy_session_info(session: SessionInfo) -> None:
     )
 
     try:
-        import tkinter as tk
+        import subprocess
+        import sys
 
-        root = tk.Tk()
-        root.withdraw()
-        root.clipboard_clear()
-        root.clipboard_append(text)
-        root.update()
-        root.destroy()
+        encoded = text.encode("utf-16")  # clip.exe expects UTF-16 with BOM
+        if sys.platform == "win32":
+            # Use clip.exe — ships with every Windows install, no Tkinter needed
+            proc = subprocess.Popen(
+                ["clip"],
+                stdin=subprocess.PIPE,
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+            )
+            proc.communicate(input=encoded)
+        elif sys.platform == "darwin":
+            proc = subprocess.Popen(["pbcopy"], stdin=subprocess.PIPE)
+            proc.communicate(input=text.encode("utf-8"))
+        else:
+            # Linux: try xclip then xsel
+            for cmd in (["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]):
+                try:
+                    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+                    proc.communicate(input=text.encode("utf-8"))
+                    break
+                except FileNotFoundError:
+                    continue
     except Exception:
         pass  # Clipboard copy is best-effort
 
 
 # Singleton message log window reference
 _message_log_window: object | None = None
+_message_log_tk_root: object | None = None  # The actual tk.Tk root for atexit cleanup
 _message_log_lock = threading.Lock()
+
+
+def _destroy_message_log_on_exit() -> None:
+    """Gracefully stop the Tkinter message log window to prevent Tcl_AsyncDelete.
+
+    Schedules quit() on the Tkinter event loop thread (the only thread-safe
+    way to terminate a running mainloop) and waits briefly for it to exit.
+    Must be called before os._exit() so Tcl can clean up its async handlers.
+
+    Registered via atexit when the message log window is first created.
+    """
+    global _message_log_window, _message_log_tk_root
+    root = _message_log_tk_root
+    if root is None:
+        return
+    try:
+        # Schedule quit on the Tk event loop thread — thread-safe
+        root.after(0, root.quit)  # type: ignore[union-attr]
+    except Exception:
+        pass
+    # Give the mainloop thread a moment to quit cleanly
+    import time
+    time.sleep(0.15)
+    _message_log_window = None
+    _message_log_tk_root = None
 
 
 def _show_message_log(message_log: MessageLog, store: SessionStore) -> None:
@@ -316,25 +377,37 @@ def _show_message_log(message_log: MessageLog, store: SessionStore) -> None:
         lines = []
         for entry in entries:
             session = store.get(entry.session_id) if entry.session_id else None
-            label = session.display_name if session else entry.session_id
+            # Use client_name (stable) instead of display_name (includes
+            # last_tool which changes per-message and is stale at render time)
+            if session:
+                prefix = "\u26d4 " if session.interrupted else "\u2705 "
+                label = prefix + (session.client_name or f"PID {session.pid}")
+            else:
+                label = entry.session_id
             lines.append(entry.format(label))
         return "\n".join(lines)
 
     def _run_window() -> None:
-        global _message_log_window
+        global _message_log_window, _message_log_tk_root
         try:
             import tkinter as tk
 
             window = tk.Tk()
             _message_log_window = window
+            _message_log_tk_root = window  # Track root for atexit cleanup
+            # Register atexit cleanup once per window creation so Tcl
+            # async handlers are properly destroyed before Python exits,
+            # preventing the fatal Tcl_AsyncDelete crash.
+            atexit.register(_destroy_message_log_on_exit)
             window.title("Lineage MCP \u2014 Message Log")
             window.geometry("750x500")
             window.minsize(500, 350)
             window.configure(bg="#1e1e1e")
 
             def _on_close() -> None:
-                global _message_log_window
+                global _message_log_window, _message_log_tk_root
                 _message_log_window = None
+                _message_log_tk_root = None
                 window.destroy()
 
             window.protocol("WM_DELETE_WINDOW", _on_close)
@@ -411,5 +484,6 @@ def _show_message_log(message_log: MessageLog, store: SessionStore) -> None:
             window.mainloop()
         except Exception:
             _message_log_window = None  # Ensure cleanup on error
+            _message_log_tk_root = None
 
     threading.Thread(target=_run_window, daemon=True).start()

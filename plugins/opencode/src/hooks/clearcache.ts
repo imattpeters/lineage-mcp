@@ -1,5 +1,5 @@
 /**
- * PreCompact hook for OpenCode.
+ * Cache clearing hook for OpenCode context compaction.
  *
  * Fires when context compaction is about to occur, triggering
  * cache clearing in lineage-mcp via the tray.
@@ -16,9 +16,9 @@ const CLIENT_NAME = "opencode";
  * This fires BEFORE compaction occurs, giving us a chance to
  * clear lineage-mcp caches while the full context is still available.
  */
-export async function handleCompacting(ctx: PluginInput): Promise<void> {
+export async function handleClearCache(ctx: PluginInput): Promise<void> {
   try {
-    const sessionsCleared = await sendClearByFilter(ctx.directory, CLIENT_NAME);
+    const sessionsCleared = await sendClearByFilter(ctx.directory, CLIENT_NAME, "PreCompact");
 
     if (sessionsCleared > 0) {
       ctx.client.app.log({
