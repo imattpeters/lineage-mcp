@@ -191,16 +191,31 @@ async def read_file(
     mark_instruction_folder_if_applicable(full_path)
 
     # Pre-generate overhead sections (needed for budget calculation)
+    # Include any pending overhead from a previous read of this same file that couldn't fit
+    pending = session.pending_overhead.pop(file_path, "")
+
     changed_section = format_changed_files_section()
     instruction_files = find_instruction_files_in_parents(full_path)
     instruction_content = include_instruction_file_content(instruction_files)
 
-    overhead = ""
+    # Build full desired overhead (pending first, then new content)
+    full_overhead_parts: list[str] = []
+    if pending:
+        full_overhead_parts.append(pending)
     if changed_section:
-        overhead += f"\n\n---\n{changed_section}"
+        full_overhead_parts.append(f"\n\n---\n{changed_section}")
     if instruction_content:
-        overhead += f"\n\n---\n{instruction_content}"
-    overhead_size = len(overhead)
+        full_overhead_parts.append(f"\n\n---\n{instruction_content}")
+
+    full_overhead_suffix = "".join(full_overhead_parts)
+
+    # Prepend the Lineage Message marker if there's any overhead
+    if full_overhead_suffix:
+        full_overhead = "\n\nEOF\n[Lineage Message]:" + full_overhead_suffix
+    else:
+        full_overhead = ""
+
+    overhead_size = len(full_overhead)
 
     # Determine if we need cursor-based pagination
     if cursor is not None:
@@ -220,18 +235,56 @@ async def read_file(
         # Handle cursor at or beyond EOF
         if cursor >= total_chars:
             output = f"File: {file_path}\n\nEnd of file reached."
-            output += overhead
+            # full_overhead may itself be too large; split if needed
+            header_footer_estimate = 200 + len(file_path) * 2
+            overhead_budget = effective_char_limit - len(output) - header_footer_estimate
+            if overhead_size > overhead_budget > 0:
+                marker = "\n\nEOF\n[Lineage Message]:"
+                available_for_overhead = max(0, overhead_budget - len(marker))
+                trimmed_suffix = full_overhead_suffix[:available_for_overhead]
+                spill_suffix = full_overhead_suffix[available_for_overhead:]
+                output += (marker + trimmed_suffix) if trimmed_suffix else ""
+                if spill_suffix:
+                    session.pending_overhead[file_path] = spill_suffix
+                    output += f'\n\n---\nMore Lineage messages pending. Use: read(file_path="{file_path}", cursor={total_chars})'
+            else:
+                output += full_overhead
             return output
 
         # Calculate content budget: total limit minus overhead minus header/footer estimate
         # We'll calculate the actual header/footer after extraction, but the size is predictable
         header_footer_estimate = 200 + len(file_path) * 2  # conservative
-        content_budget = effective_char_limit - overhead_size - header_footer_estimate
+        overhead_budget = effective_char_limit - header_footer_estimate
+        content_budget = overhead_budget - overhead_size
 
-        # Always allow at least some content (at minimum one line)
-        # If budget goes negative due to large overhead, we still show at least one line
-        # and accept going over the limit
-        content_budget = max(content_budget, 1)
+        # If overhead alone exceeds the budget, split it: include as much as fits,
+        # store the rest in pending_overhead to be delivered on the next cursor call.
+        if content_budget < 1:
+            # Overhead is too large to fit alongside content in this chunk.
+            # Allow at least 1 char of content (we can go slightly over limit),
+            # and spill the excess overhead into the next call.
+            content_budget = 1
+            # Trim overhead to fit: keep the marker + prefix, spill the tail
+            # We preserve the "EOF\n[Lineage Message]:" prefix (fixed ~22 chars) and
+            # fit as much of the suffix as the budget allows.
+            marker = "\n\nEOF\n[Lineage Message]:"
+            available_for_overhead = max(0, overhead_budget - len(marker) - 1)
+            trimmed_suffix = full_overhead_suffix[:available_for_overhead]
+            spill_suffix = full_overhead_suffix[available_for_overhead:]
+            if trimmed_suffix:
+                overhead = marker + trimmed_suffix
+            else:
+                overhead = ""
+            # Store spill for the next call (keyed by file path so multiple files don't collide)
+            if spill_suffix:
+                session.pending_overhead[file_path] = spill_suffix
+                has_pending_overhead = True
+            else:
+                session.pending_overhead.pop(file_path, None)
+                has_pending_overhead = False
+        else:
+            overhead = full_overhead
+            has_pending_overhead = False
 
         # Extract content within budget
         extracted, next_cursor, start_line, end_line, _ = extract_content_by_cursor(
@@ -256,7 +309,10 @@ async def read_file(
             header = f"[chars {cursor}-{next_cursor} of {total_chars} ({percent_of_file}% of file)] File: {file_path}\n"
         else:
             header = f"[chars {cursor}-{next_cursor} of {total_chars} ({percent_of_file}% of file), ~{reads_remaining} reads remaining] File: {file_path}\n"
-        header += f"Showing lines {start_line + 1}-{end_line} of {total_lines}\n\n"
+        header += f"Showing lines {start_line + 1}-{end_line} of {total_lines}\n"
+        if not is_last:
+            header += f"[Lineage: file not complete - you MUST call read again with cursor={next_cursor} to get the rest]\n"
+        header += "\n"
 
         output = header + extracted
 
@@ -264,11 +320,16 @@ async def read_file(
         if not is_last:
             continuation = f'\n\n---\nTo continue reading, use: read(file_path="{file_path}", cursor={next_cursor})'
             continuation += f"\n(~{reads_remaining} reads remaining, next starts at line {end_line + 1})"
+        elif session.pending_overhead.get(file_path):
+            # File content exhausted but there is still spilled overhead to deliver
+            continuation = f'\n\n---\nEnd of file reached. More Lineage messages pending. Use: read(file_path="{file_path}", cursor={next_cursor})'
         else:
             continuation = "\n\n---\nEnd of file reached."
 
     else:
         # Use existing offset/limit logic (no cursor pagination)
+        # Overhead is always appended in full for non-paginated reads.
+        overhead = full_overhead
         start_line = offset if offset is not None else 0
         if start_line >= total_lines:
             # Offset beyond EOF

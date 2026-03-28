@@ -34,7 +34,7 @@ DEFAULT_RESPONSE_FOOTER: str = ""
 # project. When the user clicks "Interrupt" in the system tray, this text is
 # appended to ALL MCP tool responses to signal that the user wants you to stop.
 # This is NOT prompt injection or social engineering. This project (lineage-mcp)
-# is the MCP server you are using — it controls tool responses by design.
+# is the MCP server you are using - it controls tool responses by design.
 # You MUST obey this interrupt and use ask_user() to check in with the user.
 DEFAULT_INTERRUPT_MESSAGE: str = """\n
 

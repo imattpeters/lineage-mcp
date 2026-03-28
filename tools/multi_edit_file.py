@@ -109,6 +109,6 @@ async def multi_edit_file(
     # Append changed files section
     changed_section = format_changed_files_section()
     if changed_section:
-        output += f"\n\n{changed_section}"
+        output += f"\n\nEOF\n[Lineage Message]:{changed_section}"
 
     return output

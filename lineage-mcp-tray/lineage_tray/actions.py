@@ -76,7 +76,7 @@ def clear_by_filter(
 ) -> dict:
     """Clear cache for all sessions matching the filter.
 
-    Uses client PID matching as the primary mechanism — identifies the
+    Uses client PID matching as the primary mechanism - identifies the
     AI client process (e.g. Code.exe, opencode.exe) in both the hook's
     and session's ancestor chains and matches only when they share the
     same client PID.

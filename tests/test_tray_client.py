@@ -143,7 +143,7 @@ class TestSessionStateInterrupted:
         s = SessionState()
         s.interrupted = True
         assert s.check_interrupted() is True
-        # Should NOT be reset — persists until resume()
+        # Should NOT be reset - persists until resume()
         assert s.interrupted is True
         assert s.check_interrupted() is True
 

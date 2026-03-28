@@ -72,14 +72,14 @@ class TrayApp:
                 self.store.register(msg)
             elif msg_type == "update":
                 logger.debug(
-                    "Session update: %s — %s",
+                    "Session update: %s - %s",
                     session_id,
                     {k: v for k, v in msg.items() if k != "type"},
                 )
                 self.store.update(session_id, msg)
             elif msg_type == "tool_call":
                 logger.debug(
-                    "Tool call: %s — %s",
+                    "Tool call: %s - %s",
                     session_id,
                     msg.get("summary", ""),
                 )

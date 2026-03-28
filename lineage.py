@@ -35,7 +35,7 @@ try:
     from path_utils import get_base_dir
     init_tray_client(str(get_base_dir()))
 except Exception:
-    pass  # Tray is optional — never fail the server
+    pass  # Tray is optional - never fail the server
 
 # Create MCP server instance
 mcp = FastMCP("lineage")
@@ -119,9 +119,9 @@ async def search(pattern: str, path: str = "", ctx: Context = None) -> str:
 async def read(
     file_path: str,
     show_line_numbers: bool = False,
-    offset: int | None = None,
-    limit: int | None = None,
-    cursor: int | None = None,
+    offset: int | str | None = None,
+    limit: int | str | None = None,
+    cursor: int | str | None = None,
     ctx: Context = None,
 ) -> str:
     """Read the contents of a file.
@@ -159,6 +159,18 @@ async def read(
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
+    def _coerce_int(name: str, value: int | str | None) -> int | None:
+        if value is None or isinstance(value, int):
+            return value
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            raise ValueError(f"'{name}' must be an integer, got: {value!r}")
+
+    offset = _coerce_int("offset", offset)
+    limit = _coerce_int("limit", limit)
+    cursor = _coerce_int("cursor", cursor)
+
     log_tool_call("read", ctx=ctx, file_path=file_path,
                   show_line_numbers=show_line_numbers,
                   offset=offset, limit=limit, cursor=cursor)

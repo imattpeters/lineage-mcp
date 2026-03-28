@@ -68,7 +68,6 @@ feat(utils): add date helpers and clarify README setup
 - add parseISO and formatDate utilities in src/utils/date.ts
 - document required Node version and env setup in README
 
-refs #123
 ```
 
 ## Confirmation flow

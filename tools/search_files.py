@@ -4,7 +4,7 @@ import asyncio
 from pathlib import Path
 
 from file_watcher import format_changed_files_section
-from path_utils import get_base_dir, resolve_path
+from path_utils import get_allow_full_paths, get_base_dir, resolve_path
 
 
 async def search_files(pattern: str, path: str = "") -> str:
@@ -32,12 +32,14 @@ async def search_files(pattern: str, path: str = "") -> str:
     def do_glob():
         matches: list[Path] = []
         for match in search_dir.glob(pattern):
-            # Security: ensure match is still within base directory
-            try:
-                match.resolve().relative_to(base_dir.resolve())
-                matches.append(match)
-            except ValueError:
-                continue
+            resolved = match.resolve()
+            # Security: only allow results outside base_dir when allowFullPaths is enabled
+            if not get_allow_full_paths():
+                try:
+                    resolved.relative_to(base_dir.resolve())
+                except ValueError:
+                    continue
+            matches.append(match)
         return matches
 
     matches = await asyncio.to_thread(do_glob)
@@ -47,13 +49,16 @@ async def search_files(pattern: str, path: str = "") -> str:
     else:
         lines = [f"Found {len(matches)} file(s) matching '{pattern}':", ""]
         for match in sorted(matches):
-            rel_path = match.relative_to(base_dir)
-            lines.append(f"- {rel_path}")
+            try:
+                display_path = match.relative_to(base_dir)
+            except ValueError:
+                display_path = match
+            lines.append(f"- {display_path}")
         output = "\n".join(lines)
 
     # Append changed files section
     changed_section = format_changed_files_section()
     if changed_section:
-        output += f"\n\n{changed_section}"
+        output += f"\n\nEOF\n[Lineage Message]:{changed_section}"
 
     return output

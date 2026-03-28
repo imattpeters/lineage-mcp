@@ -87,7 +87,12 @@ uv pip install -r requirements.txt
   "mcpServers": {
     "lineage": {
       "command": "uv",
-      "args": ["run", "python", "/path/to/lineage-mcp/lineage.py", "/your/workspace"]
+      "args": [
+        "run",
+        "python",
+        "/path/to/lineage-mcp/lineage.py",
+        "/your/workspace"
+      ]
     }
   }
 }
@@ -102,7 +107,14 @@ Using `uv run` ensures dependencies are installed and the script runs in the cor
   "mcpServers": {
     "lineage": {
       "command": "docker",
-      "args": ["run", "-i", "--rm", "-v", "/your/workspace:/data", "lineage-mcp"]
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-v",
+        "/your/workspace:/data",
+        "lineage-mcp"
+      ]
     }
   }
 }
@@ -132,16 +144,16 @@ OpenCode uses a [plugin system](https://opencode.ai/docs/plugins) for hooks. See
 
 ## Tools Reference
 
-| Tool         | Description                         | Parameters                                                            |
-| ------------ | ----------------------------------- | --------------------------------------------------------------------- |
-| `list`       | List directory contents             | `path` (optional)                                                     |
-| `search`     | Search files by glob pattern        | `pattern`, `path` (optional)                                          |
-| `read`       | Read file with change tracking      | `file_path`, `show_line_numbers`, `offset`, `limit`                   |
-| `write`      | Write content to file               | `file_path`, `content`                                                |
-| `edit`       | Replace string in file              | `file_path`, `old_string`, `new_string`, `replace_all`                |
-| `multi_edit` | Batch string replacements           | `edits`                                                               |
-| `delete`     | Delete file or empty directory      | `file_path`                                                           |
-| `clear`      | Clear all session caches            | (none)                                                                |
+| Tool         | Description                    | Parameters                                             |
+| ------------ | ------------------------------ | ------------------------------------------------------ |
+| `list`       | List directory contents        | `path` (optional)                                      |
+| `search`     | Search files by glob pattern   | `pattern`, `path` (optional)                           |
+| `read`       | Read file with change tracking | `file_path`, `show_line_numbers`, `offset`, `limit`    |
+| `write`      | Write content to file          | `file_path`, `content`                                 |
+| `edit`       | Replace string in file         | `file_path`, `old_string`, `new_string`, `replace_all` |
+| `multi_edit` | Batch string replacements      | `edits`                                                |
+| `delete`     | Delete file or empty directory | `file_path`                                            |
+| `clear`      | Clear all session caches       | (none)                                                 |
 
 ## Usage Examples
 
@@ -311,7 +323,7 @@ Cache clears within a 30-second window are silently ignored to prevent redundant
 
 ### Client Hooks
 
-Hook scripts automatically clear lineage-mcp caches on session start and before context compaction. The tray application must be running for hooks to work — it routes cache clear requests to the correct session using ancestor PID matching.
+Hook scripts automatically clear lineage-mcp caches on session start and before context compaction. The tray application must be running for hooks to work - it routes cache clear requests to the correct session using ancestor PID matching.
 
 #### VS Code (Copilot Chat)
 
@@ -356,9 +368,10 @@ const CLEARCACHE_SCRIPT = "/path/to/lineage-mcp/hooks/clearcache.py";
 ```
 
 The plugin hooks into three events:
-- **`session.created`** — Clears stale caches when a new session starts
-- **`experimental.session.compacting`** — Clears caches before context compaction
-- **`session.compacted`** — Fallback clear after compaction completes
+
+- **`session.created`** - Clears stale caches when a new session starts
+- **`experimental.session.compacting`** - Clears caches before context compaction
+- **`session.compacted`** - Fallback clear after compaction completes
 
 Add the plugin type dependency to `.opencode/package.json`:
 

@@ -33,6 +33,7 @@ class SessionState:
     last_new_session_time: Optional[float] = field(default=None)
     new_session_clear_count: int = field(default=0)
     interrupted: bool = field(default=False)
+    pending_overhead: Dict[str, str] = field(default_factory=dict)
 
     def clear(self) -> None:
         """Clear all session caches unconditionally.
@@ -47,6 +48,7 @@ class SessionState:
         self.provided_folders.clear()
         self.last_new_session_time = None
         self.new_session_clear_count += 1
+        self.pending_overhead.clear()
 
     def try_new_session(self) -> bool:
         """Attempt to clear caches with cooldown protection.
@@ -71,6 +73,7 @@ class SessionState:
         self.provided_folders.clear()
         self.last_new_session_time = now
         self.new_session_clear_count += 1
+        self.pending_overhead.clear()
         return True
 
     def track_file(self, file_path: str, mtime_ms: int, content: str) -> None:

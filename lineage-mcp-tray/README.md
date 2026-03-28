@@ -32,6 +32,6 @@ The tray application is automatically launched by `lineage-mcp` when a session s
 
 ## Dependencies
 
-- `pystray` — System tray icon and menus
-- `Pillow` — Icon generation
-- `tkinter` — Standard library, used for clipboard operations
+- `pystray` - System tray icon and menus
+- `Pillow` - Icon generation
+- `tkinter` - Standard library, used for clipboard operations

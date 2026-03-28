@@ -63,7 +63,7 @@ def main() -> None:
 
     # Register atexit to suppress Tcl_AsyncDelete errors on exit.
     # These occur when Python's interpreter shuts down and Tcl tries
-    # to clean up async handlers from the wrong thread — harmless but noisy.
+    # to clean up async handlers from the wrong thread - harmless but noisy.
     def _suppress_tcl_on_exit() -> None:
         try:
             app.stop()
@@ -86,7 +86,7 @@ def main() -> None:
         sys.exit(1)
     finally:
         # Force-exit to avoid Tcl_AsyncDelete errors during interpreter
-        # shutdown. The app is already stopped at this point — all pipes
+        # shutdown. The app is already stopped at this point - all pipes
         # closed, icon removed, threads are daemon threads.
         logger.info("Tray app exited cleanly")
         logging.shutdown()

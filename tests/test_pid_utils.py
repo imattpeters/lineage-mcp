@@ -1,4 +1,4 @@
-"""Tests for hooks/pid_utils.py — ancestor PID chain retrieval."""
+"""Tests for hooks/pid_utils.py - ancestor PID chain retrieval."""
 
 import os
 import sys

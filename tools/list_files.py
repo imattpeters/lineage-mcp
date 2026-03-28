@@ -32,13 +32,16 @@ async def list_files(path: str = "") -> str:
 
     for entry in entries:
         try:
-            rel_path = entry.relative_to(base_dir)
+            try:
+                display_path = entry.relative_to(base_dir)
+            except ValueError:
+                display_path = entry
             if entry.is_dir():
-                lines.append(f"| {rel_path}/ | 📁 dir | - |")
+                lines.append(f"| {display_path}/ | 📁 dir | - |")
             else:
                 size = entry.stat().st_size
-                lines.append(f"| {rel_path} | 📄 file | {size:,} bytes |")
-        except (OSError, ValueError):
+                lines.append(f"| {display_path} | 📄 file | {size:,} bytes |")
+        except OSError:
             continue
 
     output = "\n".join(lines)
@@ -46,6 +49,6 @@ async def list_files(path: str = "") -> str:
     # Append changed files section
     changed_section = format_changed_files_section()
     if changed_section:
-        output += f"\n\n{changed_section}"
+        output += f"\n\nEOF\n[Lineage Message]:{changed_section}"
 
     return output

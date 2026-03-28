@@ -343,7 +343,7 @@ class TestFindByFilterAncestorPids:
             "started_at": time.time(),
             "ancestor_pids": [100, 200, 300],
         })
-        # Hook has chain [400, 200, 500] — shares PID 200
+        # Hook has chain [400, 200, 500] - shares PID 200
         matches = store.find_by_filter(
             base_dir="C:\\proj", ancestor_pids=[400, 200, 500]
         )
@@ -793,7 +793,7 @@ class TestFindByFilterClientPidMatching:
         assert len(matches) == 1
 
     def test_three_clients_same_workspace(self):
-        """Three clients on same workspace — each hook clears only its own."""
+        """Three clients on same workspace - each hook clears only its own."""
         store = SessionStore()
         store.register({
             "session_id": "vscode",

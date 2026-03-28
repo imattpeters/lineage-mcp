@@ -224,7 +224,7 @@ class TestClearByFilter:
             "ancestor_names": ["python.exe", "opencode.exe", "explorer.exe"],
         })
 
-        # VS Code hook — should only clear vscode session
+        # VS Code hook - should only clear vscode session
         result = clear_by_filter(
             store, mock_server,
             base_dir="C:\\proj1",

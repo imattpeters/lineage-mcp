@@ -9,7 +9,7 @@
  *   1. Copy this file to your project's .opencode/plugins/ directory
  *   2. Update CLEARCACHE_SCRIPT below to your lineage-mcp install path
  *   3. Add {"dependencies":{"@opencode-ai/plugin":"latest"}} to .opencode/package.json
- *   4. Restart OpenCode — the plugin auto-loads at startup
+ *   4. Restart OpenCode - the plugin auto-loads at startup
  */
 
 import type { Plugin } from "@opencode-ai/plugin";
@@ -24,13 +24,18 @@ const CLEARCACHE_SCRIPT = "/path/to/lineage-mcp/hooks/clearcache.py";
  * Spawn hooks/clearcache.py and pipe JSON to stdin.
  * Returns the stderr output on success.
  */
-function sendClearByFilter(directory: string, hookEvent: string = "PreCompact"): Promise<string> {
+function sendClearByFilter(
+  directory: string,
+  hookEvent: string = "PreCompact",
+): Promise<string> {
   return new Promise((resolve_val, reject) => {
     const proc = spawn("python", [CLEARCACHE_SCRIPT, CLIENT_NAME], {
       stdio: ["pipe", "pipe", "pipe"],
     });
 
-    proc.stdin.write(JSON.stringify({ cwd: directory, hook_event_name: hookEvent }));
+    proc.stdin.write(
+      JSON.stringify({ cwd: directory, hook_event_name: hookEvent }),
+    );
     proc.stdin.end();
 
     let stderr = "";
@@ -65,7 +70,7 @@ export const LineageMcpPlugin: Plugin = async (ctx) => {
           });
         }
       } catch {
-        // Tray not running or Python not available — silent no-op
+        // Tray not running or Python not available - silent no-op
       }
     },
 
@@ -87,19 +92,19 @@ export const LineageMcpPlugin: Plugin = async (ctx) => {
           });
         }
       } catch {
-        // Tray not running or Python not available — silent no-op
+        // Tray not running or Python not available - silent no-op
       }
     },
 
     /**
      * Fires after context compaction completes.
-     * Secondary hook — clears caches if pre-compaction hook missed.
+     * Secondary hook - clears caches if pre-compaction hook missed.
      */
     "session.compacted": async (_input, _output) => {
       try {
         await sendClearByFilter(ctx.directory, "PreCompact");
       } catch {
-        // Tray not running or Python not available — silent no-op
+        // Tray not running or Python not available - silent no-op
       }
     },
   };

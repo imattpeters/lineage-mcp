@@ -237,7 +237,7 @@ class PipeServer:
                             self.message_log.log_received(session_id, msg)
                         self.on_message(session_id, msg)
                     except (EOFError, OSError):
-                        # Connection closed — session ended
+                        # Connection closed - session ended
                         logger.debug(
                             "Connection lost for session %s (disconnected)", session_id
                         )

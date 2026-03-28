@@ -80,7 +80,7 @@ class SessionInfo:
     started_at: float  # time.time() epoch
     client_name: Optional[str] = None  # e.g. "vscode-copilot", "claude-desktop"
     first_call: Optional[str] = None  # e.g. "[edit:C:/a_file.md]"
-    last_tool: Optional[str] = None  # e.g. "[read:src/main.py]" — most recent tool
+    last_tool: Optional[str] = None  # e.g. "[read:src/main.py]" - most recent tool
     files_tracked: int = 0
     last_seen: float = field(default_factory=time.time)
     interrupted: bool = False
@@ -137,7 +137,7 @@ class CompactionEvent:
     def display_str(self) -> str:
         """One-line summary for menu display."""
         name = self.client_name or "unknown"
-        return f"[{self.time_str}] {name} — {self.files_tracked} files"
+        return f"[{self.time_str}] {name} - {self.files_tracked} files"
 
 
 class SessionStore:
@@ -167,7 +167,7 @@ class SessionStore:
                     self._sessions[session_id].interrupted,
                 )
             else:
-                # New registration — filter out 'type' key
+                # New registration - filter out 'type' key
                 init_data = {k: v for k, v in data.items() if k != "type"}
                 session = SessionInfo(**init_data)
                 # Infer client name from ancestor processes if not provided
@@ -303,7 +303,7 @@ class SessionStore:
                     )
 
                     if hook_client_pid is not None and session_client_pid is not None:
-                        # Both have identifiable clients — match by client PID
+                        # Both have identifiable clients - match by client PID
                         if hook_client_pid != session_client_pid:
                             logger.debug(
                                 "  SKIP %s (%s): client PID %d != hook PID %d",

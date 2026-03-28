@@ -85,6 +85,50 @@ class TestSearchFilesNoResults(unittest.TestCase):
             self.assertNotIn("test.txt", result)
 
 
+class TestSearchFilesAllowFullPaths(unittest.TestCase):
+    """Tests for searching directories outside base_dir when allowFullPaths is enabled."""
+
+    def test_search_files_outside_base_dir_allowed_when_allow_full_paths(self) -> None:
+        """Verify searching an absolute path outside base_dir works when allowFullPaths=True."""
+        import path_utils
+
+        with TempWorkspace():
+            from tools.search_files import search_files
+
+            import tempfile
+            with tempfile.TemporaryDirectory() as outside_dir:
+                outside_path = Path(outside_dir)
+                (outside_path / "external.txt").write_text("external", encoding="utf-8")
+                (outside_path / "other.py").write_text("python", encoding="utf-8")
+
+                old_allow = path_utils._allow_full_paths
+                try:
+                    path_utils._allow_full_paths = True
+                    result = run_async(search_files("*.txt", path=str(outside_path)))
+                    self.assertIn("external.txt", result)
+                    self.assertNotIn("other.py", result)
+                    self.assertNotIn("Error", result)
+                finally:
+                    path_utils._allow_full_paths = old_allow
+
+    def test_search_files_outside_base_dir_blocked_when_not_allow_full_paths(self) -> None:
+        """Verify searching an absolute path outside base_dir is blocked when allowFullPaths=False."""
+        import path_utils
+
+        with TempWorkspace():
+            from tools.search_files import search_files
+
+            import tempfile
+            with tempfile.TemporaryDirectory() as outside_dir:
+                old_allow = path_utils._allow_full_paths
+                try:
+                    path_utils._allow_full_paths = False
+                    result = run_async(search_files("*.txt", path=str(Path(outside_dir))))
+                    self.assertIn("Error", result)
+                finally:
+                    path_utils._allow_full_paths = old_allow
+
+
 class TestSearchFilesSessionManagement(unittest.TestCase):
     """Tests for session state management during search operations."""
 

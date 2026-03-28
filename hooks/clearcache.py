@@ -1,12 +1,12 @@
 """Hook script for lineage-mcp cache clearing.
 
 Called by AI client hooks (Claude Code, VS Code, OpenCode) on session
-lifecycle events — SessionStart, PreCompact, and context compaction.
+lifecycle events - SessionStart, PreCompact, and context compaction.
 Connects to the lineage-mcp-tray Named Pipe and requests cache clearing
 for matching sessions.
 
 The hook sends its ancestor PID chain so the tray can match it against
-registered MCP server sessions — both are spawned by the same AI client
+registered MCP server sessions - both are spawned by the same AI client
 process, so their ancestor chains will overlap.
 
 Supported hook events:

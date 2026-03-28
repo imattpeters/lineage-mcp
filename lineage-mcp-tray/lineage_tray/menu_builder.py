@@ -58,7 +58,7 @@ def build_menu(
                 display = sess.display_name
                 detail = f"  {sess.files_tracked} files \u00b7 since {sess.since_str}"
 
-                # Submenu with actions — use factory to capture session in closure
+                # Submenu with actions - use factory to capture session in closure
                 sub = _make_session_submenu(sess, pipe_server, store)
 
                 items.append(MenuItem(display, sub))
@@ -293,7 +293,7 @@ def _copy_session_info(session: SessionInfo) -> None:
 
         encoded = text.encode("utf-16")  # clip.exe expects UTF-16 with BOM
         if sys.platform == "win32":
-            # Use clip.exe — ships with every Windows install, no Tkinter needed
+            # Use clip.exe - ships with every Windows install, no Tkinter needed
             proc = subprocess.Popen(
                 ["clip"],
                 stdin=subprocess.PIPE,
@@ -336,7 +336,7 @@ def _destroy_message_log_on_exit() -> None:
     if root is None:
         return
     try:
-        # Schedule quit on the Tk event loop thread — thread-safe
+        # Schedule quit on the Tk event loop thread - thread-safe
         root.after(0, root.quit)  # type: ignore[union-attr]
     except Exception:
         pass
@@ -362,7 +362,7 @@ def _show_message_log(message_log: MessageLog, store: SessionStore) -> None:
     with _message_log_lock:
         if _message_log_window is not None:
             try:
-                # Window exists — bring to front
+                # Window exists - bring to front
                 _message_log_window.lift()  # type: ignore[union-attr]
                 _message_log_window.focus_force()  # type: ignore[union-attr]
                 return

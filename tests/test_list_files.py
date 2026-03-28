@@ -79,6 +79,50 @@ class TestListFilesMetadata(unittest.TestCase):
             self.assertIn("folder", result)
 
 
+class TestListFilesAllowFullPaths(unittest.TestCase):
+    """Tests for listing directories outside base_dir when allowFullPaths is enabled."""
+
+    def test_list_files_outside_base_dir_allowed_when_allow_full_paths(self) -> None:
+        """Verify listing an absolute path outside base_dir works when allowFullPaths=True."""
+        import path_utils
+
+        with TempWorkspace() as workspace:
+            from tools.list_files import list_files
+
+            # Create a second temp dir outside the base workspace
+            import tempfile
+            with tempfile.TemporaryDirectory() as outside_dir:
+                outside_path = Path(outside_dir)
+                (outside_path / "external.txt").write_text("external", encoding="utf-8")
+                (outside_path / "subdir").mkdir()
+
+                old_allow = path_utils._allow_full_paths
+                try:
+                    path_utils._allow_full_paths = True
+                    result = run_async(list_files(str(outside_path)))
+                    self.assertIn("external.txt", result)
+                    self.assertNotIn("Error", result)
+                finally:
+                    path_utils._allow_full_paths = old_allow
+
+    def test_list_files_outside_base_dir_blocked_when_not_allow_full_paths(self) -> None:
+        """Verify listing an absolute path outside base_dir is blocked when allowFullPaths=False."""
+        import path_utils
+
+        with TempWorkspace():
+            from tools.list_files import list_files
+
+            import tempfile
+            with tempfile.TemporaryDirectory() as outside_dir:
+                old_allow = path_utils._allow_full_paths
+                try:
+                    path_utils._allow_full_paths = False
+                    result = run_async(list_files(str(Path(outside_dir))))
+                    self.assertIn("Error", result)
+                finally:
+                    path_utils._allow_full_paths = old_allow
+
+
 class TestListFilesSessionManagement(unittest.TestCase):
     """Tests for session state management during list operations."""
 

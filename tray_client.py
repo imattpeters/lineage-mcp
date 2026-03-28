@@ -3,7 +3,7 @@
 This module is part of the lineage-mcp server. It connects to the tray
 application (if running) and sends session registration and update messages.
 
-All operations are fire-and-forget — the tray is optional and failures
+All operations are fire-and-forget - the tray is optional and failures
 are silently ignored to avoid impacting the core MCP server.
 """
 
@@ -21,39 +21,39 @@ from hooks.pid_utils import get_ancestor_chain
 
 def _format_tool_arg(key: str, value: object, max_preview_len: int = 20) -> str:
     """Format a single tool argument for logging.
-    
+
     Control parameters (flags, counts, limits) are shown in full.
     Data parameters (strings, paths) show first N characters + length.
-    
+
     Args:
         key: Parameter name
         value: Parameter value
         max_preview_len: Max characters to show for string/data params
-        
+
     Returns:
         Formatted string like 'key=value' or 'key="preview..." (len chars)'
     """
     # Skip None values
     if value is None:
         return f"{key}=None"
-    
+
     # Control parameters - show in full
-    if key in ("replace_all", "show_line_numbers", "cursor", "offset", "limit", 
+    if key in ("replace_all", "show_line_numbers", "cursor", "offset", "limit",
                "timeout", "max_results", "maxlen"):
         return f"{key}={value}"
-    
+
     # Booleans - show in full
     if isinstance(value, bool):
         return f"{key}={value}"
-    
+
     # Numbers - show in full
     if isinstance(value, (int, float)):
         return f"{key}={value}"
-    
+
     # Lists/arrays - show type and count
     if isinstance(value, (list, dict)):
         return f"{key}(type={type(value).__name__}, len={len(value)})"
-    
+
     # Strings - preview first N chars
     s = str(value)
     if len(s) > max_preview_len:
@@ -66,26 +66,26 @@ def _format_tool_arg(key: str, value: object, max_preview_len: int = 20) -> str:
 
 def format_tool_call(tool_name: str, **kwargs) -> str:
     """Format a tool call with parameters for logging.
-    
+
     Args:
         tool_name: Name of the tool
         **kwargs: Tool parameters
-        
+
     Returns:
         Formatted string like 'read: src/app.py, offset=100, limit=50'
     """
     # Extract file_path or pattern as the primary identifier
     file_path = kwargs.pop("file_path", None) or kwargs.pop("pattern", None)
-    
+
     formatted_args = []
     if file_path:
         formatted_args.append(str(file_path))
-    
+
     # Format remaining args
     for key, value in kwargs.items():
         if key not in ("ctx",):  # Skip context
             formatted_args.append(_format_tool_arg(key, value))
-    
+
     args_str = ", ".join(formatted_args)
     return f"{tool_name}: {args_str}" if args_str else tool_name
 
@@ -111,7 +111,7 @@ PIPE_AUTHKEY = b"lineage-mcp-tray-v1"
 class TrayClient:
     """Connects to the tray process and sends session updates.
 
-    All public methods are designed to never raise exceptions — failures
+    All public methods are designed to never raise exceptions - failures
     are logged internally and the client silently becomes a no-op.
 
     Args:
@@ -339,7 +339,7 @@ def ensure_tray_running() -> bool:
         conn.close()
         return True  # Tray already running
     except (ConnectionRefusedError, FileNotFoundError, OSError):
-        pass  # Tray not running — try to start it
+        pass  # Tray not running - try to start it
 
     # Try to launch tray
     try:
@@ -442,26 +442,26 @@ def log_tool_call(tool_name: str, *, ctx: object | None = None, **kwargs) -> Non
 
 def update_tray_client_name(client_name: str | None) -> None:
     """Update tray with client name (once per session).
-    
+
     Args:
         client_name: MCP client name.
     """
     if _tray_client is None:
         return
-    
+
     # If disconnected, try reconnect (which also re-registers)
     if not _tray_client._connected:
         _tray_client._try_reconnect()
     if not _tray_client._connected:
         return
-    
+
     # Reset flags if generation changed (reconnection happened)
     global _first_call_sent, _client_name_sent, _known_generation
     if _tray_client._connection_generation != _known_generation:
         _known_generation = _tray_client._connection_generation
         _first_call_sent = False
         _client_name_sent = False
-    
+
     if not _client_name_sent and client_name:
         _client_name_sent = True
         try:
@@ -493,7 +493,7 @@ def init_tray_client(base_dir: str) -> TrayClient | None:
         atexit.register(_tray_client.disconnect)
         return _tray_client
     else:
-        # Keep _tray_client alive — reconnect will be attempted on tool calls
+        # Keep _tray_client alive - reconnect will be attempted on tool calls
         atexit.register(_tray_client.disconnect)
         return None
 
