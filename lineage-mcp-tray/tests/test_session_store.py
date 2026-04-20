@@ -25,10 +25,10 @@ class TestSessionInfo:
             base_dir="C:\\proj",
             started_at=time.time(),
             client_name="Cursor",
-            first_call="[edit:app.py]",
+            first_call="[modify:app.py]",
         )
         assert "Cursor" in s.display_name
-        assert "[edit:app.py]" in s.display_name
+        assert "[modify:app.py]" in s.display_name
 
     def test_display_name_fallback_pid(self):
         s = SessionInfo(

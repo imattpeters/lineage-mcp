@@ -68,7 +68,7 @@ async def generate_example_responses() -> str:
     # Import server module functions and state
     import path_utils
     from config import INSTRUCTION_FILE_NAMES
-    from tools import delete_file, edit_file, list_files, read_file, search_files, write_file, clear_cache
+    from tools import clear_cache, delete_file, list_files, modify, read_file, search_files
     from session_state import session
 
     # Create a comprehensive test directory
@@ -271,43 +271,50 @@ async def generate_example_responses() -> str:
             examples.append("")
 
             # ================================================================
-            # TOOL 4: write_file
+            # TOOL 4: modify
             # ================================================================
             examples.append("=" * 80)
-            examples.append("TOOL 4: write_file(file_path, content)")
+            examples.append("TOOL 4: modify(operations, on_error)")
             examples.append("=" * 80)
             examples.append("")
 
-            examples.append(">>> write_file('new_file.txt', 'Hello, World!')  # Create new file")
+            examples.append(">>> modify([{\"file_path\": \"new_file.txt\", \"operation\": \"create\", \"text\": \"Hello, World!\"}])")
             examples.append("")
-            result = await write_file("new_file.txt", "Hello, World!")
+            result = await modify([
+                {"file_path": "new_file.txt", "operation": "create", "text": "Hello, World!"}
+            ])
             examples.append(result)
             examples.append("")
 
-            examples.append(">>> write_file('src/app/new_component.tsx', 'export default () => <div>New!</div>;')")
+            examples.append(">>> modify([{\"file_path\": \"src/app/new_component.tsx\", \"operation\": \"overwrite\", \"text\": \"export default () => <div>New!</div>;\"}])")
             examples.append("")
-            result = await write_file("src/app/new_component.tsx", "export default () => <div>New!</div>;")
+            result = await modify([
+                {
+                    "file_path": "src/app/new_component.tsx",
+                    "operation": "overwrite",
+                    "text": "export default () => <div>New!</div>;",
+                }
+            ])
             examples.append(result)
             examples.append("")
 
-            # Verify file was created
-            examples.append(">>> read_file('new_file.txt')  # Verify write")
+            examples.append(">>> modify([{\"file_path\": \"new_file.txt\", \"operation\": \"append\", \"text\": \"\\nAppended line\"}])")
+            examples.append("")
+            result = await modify([
+                {"file_path": "new_file.txt", "operation": "append", "text": "\nAppended line"}
+            ])
+            examples.append(result)
+            examples.append("")
+
+            # Verify file was modified
+            examples.append(">>> read_file('new_file.txt')  # Verify modify")
             examples.append("")
             result = await read_file("new_file.txt")
             examples.append(result)
             examples.append("")
 
-            # ================================================================
-            # TOOL 5: edit_file
-            # ================================================================
-            examples.append("=" * 80)
-            examples.append("TOOL 5: edit_file(file_path, old_string, new_string, replace_all)")
-            examples.append("=" * 80)
-            examples.append("")
-
-            # Create a file to edit
-            edit_test_file = tmpdir_path / "edit_test.py"
-            edit_test_file.write_text(
+            replace_test_file = tmpdir_path / "replace_test.py"
+            replace_test_file.write_text(
                 "def hello():\n"
                 "    return 'hello'\n"
                 "\n"
@@ -315,34 +322,54 @@ async def generate_example_responses() -> str:
                 "    return 'world'\n"
             )
 
-            examples.append(">>> edit_file('edit_test.py', \"return 'hello'\", \"return 'HELLO'\")")
+            examples.append(">>> modify([{\"file_path\": \"replace_test.py\", \"operation\": \"replace\", \"match_text\": \"return 'hello'\", \"text\": \"return 'HELLO'\"}])")
             examples.append("")
-            result = await edit_file("edit_test.py", "return 'hello'", "return 'HELLO'")
+            result = await modify([
+                {
+                    "file_path": "replace_test.py",
+                    "operation": "replace",
+                    "match_text": "return 'hello'",
+                    "text": "return 'HELLO'",
+                }
+            ])
             examples.append(result)
             examples.append("")
 
-            # Test replace_all
             replace_all_file = tmpdir_path / "replace_all_test.txt"
             replace_all_file.write_text("foo bar foo baz foo\nfoo is repeated foo\n")
 
-            examples.append(">>> edit_file('replace_all_test.txt', 'foo', 'FOO', replace_all=True)")
+            examples.append(">>> modify([{\"file_path\": \"replace_all_test.txt\", \"operation\": \"replace\", \"match_text\": \"foo\", \"text\": \"FOO\", \"occurrence\": \"all\"}])")
             examples.append("")
-            result = await edit_file("replace_all_test.txt", "foo", "FOO", replace_all=True)
+            result = await modify([
+                {
+                    "file_path": "replace_all_test.txt",
+                    "operation": "replace",
+                    "match_text": "foo",
+                    "text": "FOO",
+                    "occurrence": "all",
+                }
+            ])
             examples.append(result)
             examples.append("")
 
-            # Test error case - string not found
-            examples.append(">>> edit_file('edit_test.py', 'nonexistent', 'replacement')  # Error case")
+            examples.append(">>> modify([{\"file_path\": \"replace_test.py\", \"operation\": \"replace\", \"match_text\": \"nonexistent\", \"text\": \"replacement\"}], on_error='abort')  # Error case")
             examples.append("")
-            result = await edit_file("edit_test.py", "nonexistent", "replacement")
+            result = await modify([
+                {
+                    "file_path": "replace_test.py",
+                    "operation": "replace",
+                    "match_text": "nonexistent",
+                    "text": "replacement",
+                }
+            ], on_error="abort")
             examples.append(result)
             examples.append("")
 
             # ================================================================
-            # TOOL 6: delete_file
+            # TOOL 5: delete_file
             # ================================================================
             examples.append("=" * 80)
-            examples.append("TOOL 6: delete_file(file_path)")
+            examples.append("TOOL 5: delete_file(file_path)")
             examples.append("=" * 80)
             examples.append("")
 
@@ -465,7 +492,7 @@ async def generate_example_responses() -> str:
     # SUMMARY
     # ================================================================
     examples.append("=" * 80)
-    examples.append("SUMMARY - ALL 7 TOOLS TESTED")
+    examples.append("SUMMARY - ALL 6 TOOLS TESTED")
     examples.append("=" * 80)
     examples.append("")
     examples.append("1. list_files(path) - Directory listing with markdown table")
@@ -475,10 +502,9 @@ async def generate_example_responses() -> str:
     examples.append("   - Line number formatting")
     examples.append("   - Instruction file discovery (AGENTS.md, CLAUDE.md, etc.)")
     examples.append("   - Change detection")
-    examples.append("4. write_file(file_path, content) - Create/overwrite files")
-    examples.append("5. edit_file(file_path, old_string, new_string, replace_all) - String replacement")
-    examples.append("6. delete_file(file_path) - Delete files and empty directories")
-    examples.append("7. clear_cache() - Clear all session caches")
+    examples.append("4. modify(operations, on_error) - Unified create/overwrite/append/replace")
+    examples.append("5. delete_file(file_path) - Delete files and empty directories")
+    examples.append("6. clear_cache() - Clear all session caches")
     examples.append("")
     examples.append("Cache is cleared via the system tray or client hooks, or explicitly via clear_cache().")
     examples.append("All tools include [CHANGED_FILES] section when external changes are detected.")
@@ -505,11 +531,10 @@ if __name__ == "__main__":
     print(f"✅ File size: {output_file.stat().st_size} bytes")
     print("✅ Generated by running actual server tool functions")
     print("")
-    print("All 7 tools tested:")
+    print("All 6 tools tested:")
     print("  1. list_files(path)")
     print("  2. search_files(pattern, path)")
     print("  3. read_file(file_path, show_line_numbers, offset, limit)")
-    print("  4. write_file(file_path, content)")
-    print("  5. edit_file(file_path, old_string, new_string, replace_all)")
-    print("  6. delete_file(file_path)")
-    print("  7. clear_cache()")
+    print("  4. modify(operations, on_error)")
+    print("  5. delete_file(file_path)")
+    print("  6. clear_cache()")

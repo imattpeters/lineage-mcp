@@ -79,7 +79,7 @@ class SessionInfo:
     base_dir: str
     started_at: float  # time.time() epoch
     client_name: Optional[str] = None  # e.g. "vscode-copilot", "claude-desktop"
-    first_call: Optional[str] = None  # e.g. "[edit:C:/a_file.md]"
+    first_call: Optional[str] = None  # e.g. "[modify:C:/a_file.md]"
     last_tool: Optional[str] = None  # e.g. "[read:src/main.py]" - most recent tool
     files_tracked: int = 0
     last_seen: float = field(default_factory=time.time)

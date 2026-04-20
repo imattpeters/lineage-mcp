@@ -38,8 +38,8 @@ def _format_tool_arg(key: str, value: object, max_preview_len: int = 20) -> str:
         return f"{key}=None"
 
     # Control parameters - show in full
-    if key in ("replace_all", "show_line_numbers", "cursor", "offset", "limit",
-               "timeout", "max_results", "maxlen"):
+    if key in ("show_line_numbers", "cursor", "offset", "limit",
+               "timeout", "max_results", "maxlen", "on_error"):
         return f"{key}={value}"
 
     # Booleans - show in full
@@ -412,7 +412,7 @@ def log_tool_call(tool_name: str, *, ctx: object | None = None, **kwargs) -> Non
     Also sends the client name (once per session) if ctx is provided.
 
     Args:
-        tool_name: Name of the tool (e.g. 'read', 'edit', 'write')
+        tool_name: Name of the tool (e.g. 'read', 'modify', 'delete')
         ctx: Optional MCP Context for client name extraction.
         **kwargs: Tool arguments (file_path, pattern, content, offset, limit, etc.)
     """

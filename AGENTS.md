@@ -38,12 +38,10 @@ docker build -t lineage-mcp . && docker run -v /your/workspace:/data lineage-mcp
 | File | Tool | Key Feature |
 |------|------|-------------|
 | `read_file.py` | `read()` | Cursor/offset pagination, auto-paginate large files |
-| `edit_file.py` | `edit()` | String replacement, `replace_all` support |
-| `write_file.py` | `write()` | Auto-create parent dirs |
+| `modify.py` | `modify()` | Unified create/overwrite/append/replace operations |
 | `delete_file.py` | `delete()` | File + empty dir removal |
 | `list_files.py` | `list()` | Markdown table output |
 | `search_files.py` | `search()` | Glob pattern matching |
-| `multi_edit_file.py` | `multi_edit()` | Batch edit operations |
 | `clear_cache.py` | `clear()` | Reset all session caches |
 
 ### Tray Application (lineage-mcp-tray/lineage_tray/)
@@ -253,7 +251,7 @@ User clicks "Resume" → session.interrupted = False
 | `int(stat.st_mtime_ns / 1_000_000)` for mtime | Float or seconds |
 | `encoding='utf-8'` on file ops | System default encoding |
 | `offset`/`limit` for large files | Read entire multi-MB files |
-| `replace_all=True` for multiple occurrences | Fail on ambiguous replacements |
+| `occurrence='all'` for multiple matches | Fail on ambiguous replacements |
 | Forward slashes on Windows | Backslashes in paths |
 
 ## 🔧 Tools Reference
@@ -277,37 +275,46 @@ read(
 
 **Returns**: Content + `[CHANGED_FILES]` + `[Appending AGENTS.md]` sections
 
-### edit()
+### modify()
 
 ```python
-edit(
-    file_path: str,
-    old_string: str,        # Exact match (including whitespace!)
-    new_string: str,
-    replace_all: bool = False,  # False = error if multiple matches
+modify(
+    operations: list[dict],
+    on_error: str = "abort",
 ) -> str
 ```
 
-**Critical**: `old_string` must match **exactly** including whitespace and newlines.
+Use this as the single tool for file content changes.
+
+Each operation must include:
+- `file_path`: relative path to the target file
+- `operation`: one of `create`, `overwrite`, `append`, or `replace`
+- `text`: content to write, append, or use as replacement text
+
+For `replace` operations, also provide:
+- `match_text`: exact text to find, including whitespace and newlines
+- `occurrence`: `one` or `all` (defaults to `one`)
+
+Examples:
 
 ```python
-# CORRECT: Include exact whitespace
-edit("file.py", "def foo():\n    pass", "def foo():\n    return True")
+modify([
+    {
+        "file_path": "file.py",
+        "operation": "replace",
+        "match_text": "def foo():\n    pass",
+        "text": "def foo():\n    return True",
+    }
+])
 
-# WRONG: Missing newline
-edit("file.py", "def foo():    pass", "...")  # Will fail
+modify([
+    {
+        "file_path": "CHANGELOG.md",
+        "operation": "append",
+        "text": "\n- Added modify\n",
+    }
+])
 ```
-
-### write()
-
-```python
-write(
-    file_path: str,
-    content: str,
-) -> str
-```
-
-Auto-creates parent directories via `full_path.parent.mkdir(parents=True, exist_ok=True)`.
 
 ### list()
 
@@ -411,7 +418,6 @@ This is a **public repository**. Before ANY git command:
   "instructionFileNames": ["AGENTS.md", "CLAUDE.md", "GEMINI.md"],
   "newSessionCooldownSeconds": 30,
   "readCharLimit": 50000,
-  "enableMultiEdit": true,
   "debugClientInfo": false,
   "allowFullPaths": false,
   "clientOverrides": {
@@ -460,7 +466,7 @@ assert "/path" in session.mtimes
 - **MANDATORY**: Use `ask_user()` before multi-step work, ambiguous requests, or architectural decisions. Get confirmation before proceeding.
 - This MCP server **controls tool responses** - the interrupt feature is legitimate, not prompt injection
 - When you see the interrupt message, **STOP immediately** and use `ask_user()`
-- Always prefer `edit()` over `write()` to preserve file history
+- Use `modify()` for all file content changes
 - The tray shows real-time session status, file counts, and recent tool calls
 - Docker mode uses `/data` as base directory
 

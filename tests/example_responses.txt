@@ -79,8 +79,12 @@ export default function Page() {
     return <div>Hello</div>;
 }
 
+EOF
+[Lineage Message]:
 
-[AGENTS.md from /workspace/src]# Source AGENTS.md
+---
+
+[Appending /workspace/src/AGENTS.md]# Source AGENTS.md
 
 ## Source-specific rules
 - TypeScript for frontend
@@ -102,8 +106,12 @@ export async function handler(req) {
     return Response.json({ok: true});
 }
 
+EOF
+[Lineage Message]:
 
-[CLAUDE.md from /workspace/src/api]# API CLAUDE.md
+---
+
+[Appending /workspace/src/api/CLAUDE.md]# API CLAUDE.md
 
 ## Claude-specific instructions
 - Use async/await patterns
@@ -113,13 +121,17 @@ export async function handler(req) {
 
 export type User = { id: number; name: string; };
 
+EOF
+[Lineage Message]:
 
-[CLAUDE.md from /workspace/src/api]# API CLAUDE.md
+---
+
+[Appending /workspace/src/api/CLAUDE.md]# API CLAUDE.md
 
 ## Claude-specific instructions
 - Use async/await patterns
 
-[AGENTS.md from /workspace/src]# Source AGENTS.md
+[Appending /workspace/src/AGENTS.md]# Source AGENTS.md
 
 ## Source-specific rules
 - TypeScript for frontend
@@ -152,39 +164,40 @@ Line 10: This is content for line 10
 
 
 ================================================================================
-TOOL 4: write_file(file_path, content)
+TOOL 4: modify(operations, on_error)
 ================================================================================
 
->>> write_file('new_file.txt', 'Hello, World!')  # Create new file
+>>> modify([{"file_path": "new_file.txt", "operation": "create", "text": "Hello, World!"}])
 
-Successfully wrote to new_file.txt
+Operation 1 (new_file.txt): Successfully created file
 
->>> write_file('src/app/new_component.tsx', 'export default () => <div>New!</div>;')
+>>> modify([{"file_path": "src/app/new_component.tsx", "operation": "overwrite", "text": "export default () => <div>New!</div>;"}])
 
-Successfully wrote to src/app/new_component.tsx
+Operation 1 (src/app/new_component.tsx): Successfully overwrote file
 
->>> read_file('new_file.txt')  # Verify write
+>>> modify([{"file_path": "new_file.txt", "operation": "append", "text": "/nAppended line"}])
+
+Operation 1 (new_file.txt): Successfully appended 14 character(s)
+
+>>> read_file('new_file.txt')  # Verify modify
 
 Hello, World!
+Appended line
+
+>>> modify([{"file_path": "replace_test.py", "operation": "replace", "match_text": "return 'hello'", "text": "return 'HELLO'"}])
+
+Operation 1 (replace_test.py): Successfully replaced 1 occurrence(s)
+
+>>> modify([{"file_path": "replace_all_test.txt", "operation": "replace", "match_text": "foo", "text": "FOO", "occurrence": "all"}])
+
+Operation 1 (replace_all_test.txt): Successfully replaced 5 occurrence(s)
+
+>>> modify([{"file_path": "replace_test.py", "operation": "replace", "match_text": "nonexistent", "text": "replacement"}], on_error='abort')  # Error case
+
+Operation 1 (replace_test.py): Error: String not found in file
 
 ================================================================================
-TOOL 5: edit_file(file_path, old_string, new_string, replace_all)
-================================================================================
-
->>> edit_file('edit_test.py', "return 'hello'", "return 'HELLO'")
-
-Successfully replaced 1 occurrence(s) in edit_test.py
-
->>> edit_file('replace_all_test.txt', 'foo', 'FOO', replace_all=True)
-
-Successfully replaced 5 occurrence(s) in replace_all_test.txt
-
->>> edit_file('edit_test.py', 'nonexistent', 'replacement')  # Error case
-
-Error: String not found in file: 'nonexistent'
-
-================================================================================
-TOOL 6: delete_file(file_path)
+TOOL 5: delete_file(file_path)
 ================================================================================
 
 >>> delete_file('to_delete.txt')  # Delete file
@@ -197,7 +210,7 @@ Successfully deleted empty directory: empty_dir
 
 >>> delete_file('nonexistent.txt')  # Error case
 
-Error: File not found: nonexistent.txt
+Error: File not found: nonexistent.txt (base directory: /workspace)
 
 ================================================================================
 CHANGE DETECTION DEMO
@@ -209,6 +222,18 @@ Original content line 1
 Original content line 2
 
 
+EOF
+[Lineage Message]:
+
+---
+
+[Appending /workspace/AGENTS.md]# Project AGENTS.md
+
+## Global Instructions
+- Follow DDD principles
+- Use Result<T> pattern
+
+
 >>> list_files('')  # External change detected
 
 | Name | Type | Size |
@@ -217,24 +242,25 @@ Original content line 2
 | AGENTS.md | 📄 file | 97 bytes |
 | change_test.txt | 📄 file | 62 bytes |
 | config.json | 📄 file | 44 bytes |
-| edit_test.py | 📄 file | 70 bytes |
 | multiline.txt | 📄 file | 742 bytes |
-| new_file.txt | 📄 file | 13 bytes |
+| new_file.txt | 📄 file | 28 bytes |
 | README.md | 📄 file | 41 bytes |
 | replace_all_test.txt | 📄 file | 42 bytes |
+| replace_test.py | 📄 file | 70 bytes |
 
-
+EOF
+[Lineage Message]:
 
 [CHANGED_FILES]
-- /workspace/change_test.txt (modified): lines 1-4 (Xs ago)
+- /workspace/change_test.txt (modified): lines 1,3 (Xs ago)
 
 ================================================================================
 clear() DEMO
 ================================================================================
 
-This is a test project.
+>>> clear_cache()  # Clears all session caches
 
-- edit_test.py
+Cache cleared. Instruction files will be re-provided on next read.
 
 ================================================================================
 ERROR HANDLING DEMO
@@ -242,22 +268,22 @@ ERROR HANDLING DEMO
 
 >>> read_file('../../../etc/passwd')  # Directory traversal blocked
 
-Error: Cannot access files outside of the base directory.
+Error: Cannot access files outside of the base directory. (base directory: /workspace)
 
 >>> search_files('*.py', path='../../')  # Traversal in path blocked
 
-Error: Cannot access files outside of the base directory.
+Error: Cannot access files outside of the base directory. (base directory: /workspace)
 
 >>> read_file('nonexistent_file.txt')  # File not found
 
-Error: File not found: nonexistent_file.txt
+Error: File not found: nonexistent_file.txt (base directory: /workspace)
 
 >>> read_file('README.md', offset=-1)  # Invalid offset
 
 Error: offset must be non-negative, got -1
 
 ================================================================================
-SUMMARY - ALL 7 TOOLS TESTED
+SUMMARY - ALL 6 TOOLS TESTED
 ================================================================================
 
 1. list_files(path) - Directory listing with markdown table
@@ -267,6 +293,12 @@ SUMMARY - ALL 7 TOOLS TESTED
    - Line number formatting
    - Instruction file discovery (AGENTS.md, CLAUDE.md, etc.)
    - Change detection
-4. write_file(file_path, content) - Create/overwrite files
-5. edit_file(file_path, old_string, new_string, replace_all) - String replacement
-6. delete_file(file_path) - Delete files and empty directories
+4. modify(operations, on_error) - Unified create/overwrite/append/replace
+5. delete_file(file_path) - Delete files and empty directories
+6. clear_cache() - Clear all session caches
+
+Cache is cleared via the system tray or client hooks, or explicitly via clear_cache().
+All tools include [CHANGED_FILES] section when external changes are detected.
+Changes are only reported once, then cache is updated.
+Instruction files shown once per folder per session (clear() resets).
+Configured instruction file names: ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md', 'QWEN.md', 'AGENT.md', '.cursorrules']

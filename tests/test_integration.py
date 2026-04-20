@@ -38,7 +38,7 @@ class TestInstructionFileIntegration(unittest.TestCase):
 
 
 class TestChangeDetectionIntegration(unittest.TestCase):
-    """Tests for change detection across read/edit operations."""
+    """Tests for change detection across read/modify operations."""
 
     def test_external_modification_detected_on_subsequent_read(self) -> None:
         """Verify external file changes are detected."""
@@ -68,21 +68,28 @@ class TestChangeDetectionIntegration(unittest.TestCase):
 
             session.clear()
 
-    def test_edit_then_external_change_detected(self) -> None:
-        """Verify external changes are detected after our edits."""
+    def test_modify_then_external_change_detected(self) -> None:
+        """Verify external changes are detected after our modifications."""
         with TempWorkspace() as ws:
             from file_watcher import get_changed_files
             from session_state import session
-            from tools.edit_file import edit_file
+            from tools.modify import modify
 
             session.clear()
 
             ws.create_file("test.txt", "Hello, World!")
 
-            # Make an edit through our tool
-            run_async(edit_file("test.txt", "World", "Python"))
+            # Make a modification through our tool
+            run_async(modify([
+                {
+                    "file_path": "test.txt",
+                    "operation": "replace",
+                    "match_text": "World",
+                    "text": "Python",
+                }
+            ]))
 
-            # No changes yet (we made the edit)
+            # No changes yet (we made the modification)
             changed = get_changed_files()
             self.assertEqual(len(changed), 0)
 

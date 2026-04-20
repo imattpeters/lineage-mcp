@@ -9,18 +9,16 @@ from typing import Dict, List
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from config import ALLOW_FULL_PATHS, DEBUG_CLIENT_INFO, ENABLE_MULTI_EDIT, INTERRUPT_MESSAGE, get_read_char_limit, get_response_footer
+from config import ALLOW_FULL_PATHS, DEBUG_CLIENT_INFO, INTERRUPT_MESSAGE, get_read_char_limit, get_response_footer
 from path_utils import init_base_dir_from_args, set_allow_full_paths
 from session_state import session
 from tools import (
     clear_cache,
     delete_file,
-    edit_file,
     list_files,
-    multi_edit_file,
+    modify as modify_impl,
     read_file,
     search_files,
-    write_file,
 )
 from tray_client import init_tray_client, log_tool_call
 
@@ -191,89 +189,46 @@ async def read(
     return _append_footer(result, client_name)
 
 @mcp.tool()
-async def write(file_path: str, content: str, ctx: Context = None) -> str:
-    """Write content to a file.
-
-    Args:
-        file_path: Path to the file relative to the base directory
-        content: Content to write to the file
-
-    Returns:
-        Success or error message.
-        If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
-        operations immediately and use ask_user() before proceeding.
-    """
-    log_tool_call("write", ctx=ctx, file_path=file_path, content=content)
-    interrupted = _check_interrupted()
-    if interrupted:
-        return interrupted
-    result = await write_file(file_path, content)
-    return _append_footer(result, _get_client_name(ctx))
-
-@mcp.tool()
-async def edit(
-    file_path: str,
-    old_string: str,
-    new_string: str,
-    replace_all: bool = False,
+async def modify(
+    operations: List[Dict],
+    on_error: str = "abort",
     ctx: Context = None,
 ) -> str:
-    """Edit a file by replacing exact string matches.
+    """Modify one or more text files by creating, overwriting, appending, or replacing exact text.
 
-    Performs targeted string replacements in a file. The old_string must exist
-    in the file and be unique (unless replace_all is True).
+    Use this as the single tool for file content changes. Provide an ordered list of
+    operations. Each operation chooses its behavior with the required `operation` field.
+
+    Operation types:
+    - create: create a new file with `text`; fails if the file already exists
+    - overwrite: replace the entire file with `text`; creates the file if needed
+    - append: add `text` to the end of an existing file
+    - replace: replace exact `match_text` with `text`
+
+    Operations run sequentially in the order provided. Later operations see the results
+    of earlier ones, including earlier operations on the same file.
 
     Args:
-        file_path: Path to the file relative to the base directory
-        old_string: Exact text to find and replace (must match exactly including whitespace)
-        new_string: Text to replace old_string with
-        replace_all: If True, replace all occurrences; if False, old_string must be unique
+        operations: Ordered list of file modification operations. Each operation must include:
+            - file_path (str): Path to the file relative to the base directory
+            - operation (str): One of 'create', 'overwrite', 'append', or 'replace'
+            - text (str): Content to write, append, or use as replacement text
+            - match_text (str, optional): Exact text to find when operation='replace'
+            - occurrence (str, optional): 'one' or 'all' for replace operations. Defaults to 'one'.
+        on_error: 'abort' to stop at the first failure, or 'continue' to keep processing later operations.
+                  Defaults to 'abort'. Earlier successful operations are not rolled back.
 
     Returns:
-        Success message with replacement count, or error message.
+        Per-operation success or error results.
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
-    log_tool_call("edit", ctx=ctx, file_path=file_path, old_string=old_string,
-                  new_string=new_string, replace_all=replace_all)
+    log_tool_call("modify", ctx=ctx, operations=operations, on_error=on_error)
     interrupted = _check_interrupted()
     if interrupted:
         return interrupted
-    result = await edit_file(file_path, old_string, new_string, replace_all)
+    result = await modify_impl(operations, on_error)
     return _append_footer(result, _get_client_name(ctx))
-
-if ENABLE_MULTI_EDIT:
-
-    @mcp.tool()
-    async def multi_edit(
-        edits: List[Dict],
-        ctx: Context = None,
-    ) -> str:
-        """Edit multiple files by replacing exact string matches in a single batch.
-
-        Performs targeted string replacements across multiple files in one call.
-        Each edit specifies a file, old_string, and new_string. If one edit fails,
-        remaining edits still proceed.
-
-        Args:
-            edits: List of edit operations. Each dict must contain:
-                - file_path (str): Path to the file relative to the base directory
-                - old_string (str): Exact text to find and replace
-                - new_string (str): Text to replace old_string with
-                - replace_all (bool, optional): If True, replace all occurrences.
-                  Defaults to False.
-
-        Returns:
-            Combined results for all edits, with per-edit success/error messages.
-            If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
-            operations immediately and use ask_user() before proceeding.
-        """
-        log_tool_call("multi_edit", ctx=ctx, edits=edits)
-        interrupted = _check_interrupted()
-        if interrupted:
-            return interrupted
-        result = await multi_edit_file(edits)
-        return _append_footer(result, _get_client_name(ctx))
 
 
 @mcp.tool()

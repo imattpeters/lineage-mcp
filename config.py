@@ -14,9 +14,6 @@ DEFAULT_INSTRUCTION_FILE_NAMES = ["AGENTS.md"]
 # Default cooldown before a new cache clear is honoured (seconds)
 DEFAULT_NEW_SESSION_COOLDOWN_SECONDS: float = 30.0
 
-# Default settings for multi_edit tool
-DEFAULT_ENABLE_MULTI_EDIT: bool = True
-
 # Default character limit for pagination
 DEFAULT_READ_CHAR_LIMIT: int = 50000
 
@@ -109,35 +106,6 @@ def load_new_session_cooldown_seconds(config_dir: Path | None = None) -> float:
         pass
 
     return DEFAULT_NEW_SESSION_COOLDOWN_SECONDS
-
-
-def load_enable_multi_edit(config_dir: Path | None = None) -> bool:
-    """Load the enableMultiEdit setting from appsettings.json.
-
-    Controls whether the multi_edit tool is registered and available.
-
-    Args:
-        config_dir: Directory containing appsettings.json. If None, uses script directory.
-
-    Returns:
-        Boolean indicating if multi_edit tool should be enabled. Defaults to True.
-    """
-    if config_dir is None:
-        config_dir = Path(__file__).parent
-
-    config_path = config_dir / "appsettings.json"
-
-    try:
-        if config_path.is_file():
-            with config_path.open("r", encoding="utf-8") as f:
-                config = json.load(f)
-                value = config.get("enableMultiEdit")
-                if isinstance(value, bool):
-                    return value
-    except (OSError, json.JSONDecodeError):
-        pass
-
-    return DEFAULT_ENABLE_MULTI_EDIT
 
 
 def load_read_char_limit(config_dir: Path | None = None) -> int:
@@ -385,7 +353,6 @@ def load_interrupt_message(config_dir: Path | None = None) -> str:
 
 # Singleton: Load instruction file names at module import
 INSTRUCTION_FILE_NAMES: List[str] = load_instruction_file_names()
-ENABLE_MULTI_EDIT: bool = load_enable_multi_edit()
 READ_CHAR_LIMIT: int = load_read_char_limit()
 CLIENT_OVERRIDES: dict = load_client_overrides()
 DEBUG_CLIENT_INFO: bool = load_debug_client_info()

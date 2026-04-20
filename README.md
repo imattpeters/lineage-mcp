@@ -23,7 +23,7 @@ Lineage MCP is a file operation server for LLM coding agents that solves two cri
 
 | Feature                   | Description                                                     |
 | ------------------------- | --------------------------------------------------------------- |
-| **File Operations**       | List, search, read, write, edit, and delete files               |
+| **File Operations**       | List, search, read, modify, and delete files                    |
 | **Batch Operations**      | Read up to 5 files or apply multiple edits in a single call     |
 | **Change Detection**      | Line-level diff detection for externally modified files         |
 | **Instruction Discovery** | Auto-finds AGENTS.md, CLAUDE.md, etc. in parent directories     |
@@ -149,9 +149,7 @@ OpenCode uses a [plugin system](https://opencode.ai/docs/plugins) for hooks. See
 | `list`       | List directory contents        | `path` (optional)                                      |
 | `search`     | Search files by glob pattern   | `pattern`, `path` (optional)                           |
 | `read`       | Read file with change tracking | `file_path`, `show_line_numbers`, `offset`, `limit`    |
-| `write`      | Write content to file          | `file_path`, `content`                                 |
-| `edit`       | Replace string in file         | `file_path`, `old_string`, `new_string`, `replace_all` |
-| `multi_edit` | Batch string replacements      | `edits`                                                |
+| `modify` | Modify one or more files | `operations`, `on_error` (optional) |
 | `delete`     | Delete file or empty directory | `file_path`                                            |
 | `clear`      | Clear all session caches       | (none)                                                 |
 
@@ -192,29 +190,39 @@ search("**/*.py")
 search("*.config.*", path="src")
 ```
 
-### String Replacement
+### File Modification
 
 ```python
-# Single replacement (fails if string appears multiple times)
-edit("config.py", "old_value", "new_value")
+# Replace one exact string
+modify([
+    {
+        "file_path": "config.py",
+        "operation": "replace",
+        "match_text": "old_value",
+        "text": "new_value",
+    }
+])
 
 # Replace all occurrences
-edit("config.py", "DEBUG = True", "DEBUG = False", replace_all=True)
-```
-
-### Batch Editing
-
-```python
-# Edit multiple files in a single call
-multi_edit([
-    {"file_path": "src/app.py", "old_string": "v1", "new_string": "v2"},
-    {"file_path": "src/config.py", "old_string": "DEBUG = True", "new_string": "DEBUG = False"},
+modify([
+    {
+        "file_path": "config.py",
+        "operation": "replace",
+        "match_text": "DEBUG = True",
+        "text": "DEBUG = False",
+        "occurrence": "all",
+    }
 ])
 
-# With replace_all per edit
-multi_edit([
-    {"file_path": "src/app.py", "old_string": "old_func", "new_string": "new_func", "replace_all": True},
-])
+# Mix multiple operations in one call
+modify(
+    operations=[
+        {"file_path": "src/app.py", "operation": "replace", "match_text": "v1", "text": "v2"},
+        {"file_path": "src/config.py", "operation": "replace", "match_text": "DEBUG = True", "text": "DEBUG = False"},
+        {"file_path": "CHANGELOG.md", "operation": "append", "text": "\n- Updated docs\n"},
+    ],
+    on_error="abort",
+)
 ```
 
 ## Change Detection
