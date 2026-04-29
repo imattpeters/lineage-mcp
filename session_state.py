@@ -23,13 +23,14 @@ class SessionState:
     Attributes:
         mtimes: Maps absolute file paths to their last-seen modification times (ms).
         contents: Maps absolute file paths to their last-seen content for diffing.
-        provided_folders: Set of folder paths where instruction files have been shown.
+        appended_instruction_folders: Set of folder paths whose instruction file
+            content has already been appended in this session.
         last_new_session_time: Monotonic timestamp of the last cooldown-protected clear.
     """
 
     mtimes: Dict[str, int] = field(default_factory=dict)
     contents: Dict[str, str] = field(default_factory=dict)
-    provided_folders: set[str] = field(default_factory=set)
+    appended_instruction_folders: set[str] = field(default_factory=set)
     last_new_session_time: Optional[float] = field(default=None)
     new_session_clear_count: int = field(default=0)
     interrupted: bool = field(default=False)
@@ -45,7 +46,7 @@ class SessionState:
         """
         self.mtimes.clear()
         self.contents.clear()
-        self.provided_folders.clear()
+        self.appended_instruction_folders.clear()
         self.last_new_session_time = None
         self.new_session_clear_count += 1
         self.pending_overhead.clear()
@@ -70,7 +71,7 @@ class SessionState:
 
         self.mtimes.clear()
         self.contents.clear()
-        self.provided_folders.clear()
+        self.appended_instruction_folders.clear()
         self.last_new_session_time = now
         self.new_session_clear_count += 1
         self.pending_overhead.clear()
@@ -96,24 +97,24 @@ class SessionState:
         self.mtimes.pop(file_path, None)
         self.contents.pop(file_path, None)
 
-    def mark_folder_provided(self, folder_path: str) -> None:
-        """Mark a folder as having its instruction file provided.
+    def mark_instruction_content_appended(self, folder_path: str) -> None:
+        """Mark a folder as having its instruction content appended.
 
         Args:
             folder_path: Absolute path to the folder.
         """
-        self.provided_folders.add(folder_path)
+        self.appended_instruction_folders.add(folder_path)
 
-    def is_folder_provided(self, folder_path: str) -> bool:
-        """Check if a folder's instruction file has been provided.
+    def has_appended_instruction_content(self, folder_path: str) -> bool:
+        """Check if a folder's instruction content has already been appended.
 
         Args:
             folder_path: Absolute path to the folder.
 
         Returns:
-            True if already provided, False otherwise.
+            True if already appended, False otherwise.
         """
-        return folder_path in self.provided_folders
+        return folder_path in self.appended_instruction_folders
 
     def should_include_base_instruction_files(self) -> bool:
         """Check if base directory instruction files should be included.

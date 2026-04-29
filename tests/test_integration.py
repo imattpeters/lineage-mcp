@@ -36,6 +36,25 @@ class TestInstructionFileIntegration(unittest.TestCase):
             self.assertIn("Parent Instructions", result)
             session.clear()
 
+    def test_second_read_keeps_instruction_file_visible_by_path(self) -> None:
+        """Verify a repeated read still advertises the instruction file path."""
+        with TempWorkspace() as ws:
+            from session_state import session
+            from tools.read_file import read_file
+
+            session.clear()
+
+            agents_path = ws.create_file("parent/AGENTS.md", "# Parent Instructions\nDo this.")
+            ws.create_file("parent/child/test.txt", "File content")
+
+            run_async(read_file("parent/child/test.txt"))
+            result = run_async(read_file("parent/child/test.txt"))
+
+            self.assertIn("Instruction file available", result)
+            self.assertIn(str(agents_path), result)
+            self.assertNotIn("Parent Instructions", result)
+            session.clear()
+
 
 class TestChangeDetectionIntegration(unittest.TestCase):
     """Tests for change detection across read/modify operations."""
@@ -51,15 +70,12 @@ class TestChangeDetectionIntegration(unittest.TestCase):
 
             file_path = ws.create_file("test.txt", "original")
 
-            # Track file with current mtime and content
             mtime = get_file_mtime_ms(file_path)
             session.track_file(str(file_path), mtime, "original")
 
-            # Simulate external modification
-            time.sleep(0.1)  # Ensure mtime changes
+            time.sleep(0.1)
             file_path.write_text("modified externally", encoding="utf-8")
 
-            # Check for changes - should detect the modification
             changed = get_changed_files()
 
             self.assertEqual(len(changed), 1)
@@ -79,7 +95,6 @@ class TestChangeDetectionIntegration(unittest.TestCase):
 
             ws.create_file("test.txt", "Hello, World!")
 
-            # Make a modification through our tool
             run_async(modify([
                 {
                     "file_path": "test.txt",
@@ -89,16 +104,13 @@ class TestChangeDetectionIntegration(unittest.TestCase):
                 }
             ]))
 
-            # No changes yet (we made the modification)
             changed = get_changed_files()
             self.assertEqual(len(changed), 0)
 
-            # Now simulate external modification
             time.sleep(0.1)
             file_path = ws.path / "test.txt"
             file_path.write_text("External override", encoding="utf-8")
 
-            # Should detect the external change
             changed = get_changed_files()
             self.assertEqual(len(changed), 1)
             self.assertEqual(changed[0]["status"], "modified")

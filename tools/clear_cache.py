@@ -6,8 +6,8 @@ from session_state import session
 async def clear_cache() -> str:
     """Clear all session caches.
 
-    Resets file tracking (mtimes, contents) and instruction file tracking
-    (provided_folders). Use when instruction files need to be re-provided
+    Resets file tracking (mtimes, contents) and appended instruction tracking
+    (appended_instruction_folders). Use when instruction files need to be re-provided
     after context compaction.
 
     Returns:

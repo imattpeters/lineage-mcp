@@ -417,6 +417,30 @@ class TestReadFileCursorPagination(unittest.TestCase):
 
             session.clear()
 
+    def test_repeated_read_surfaces_instruction_path_in_overhead(self):
+        """Repeated reads keep the instruction file visible by path."""
+        with TempWorkspace() as ws:
+            from session_state import session
+            from tools.read_file import read_file
+
+            session.clear()
+
+            ws.create_dir("src")
+            agents_path = ws.create_file("src/AGENTS.md", "# Agent Instructions\nFollow carefully.")
+            lines = [f"Line {i:03d}: " + "Q" * 90 + "\n" for i in range(50)]
+            ws.create_file("src/big.py", "".join(lines))
+
+            with self._patch_limit(3000):
+                run_async(read_file("src/big.py"))
+                result = run_async(read_file("src/big.py"))
+
+                self.assertIn("Instruction file available", result)
+                self.assertIn(str(agents_path), result)
+                self.assertNotIn("Follow carefully.", result)
+                self.assertIn("cursor=", result)
+
+            session.clear()
+
     def test_eof_reached_message(self):
         """Last read shows end of file message."""
         import re

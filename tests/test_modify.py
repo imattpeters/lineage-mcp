@@ -181,6 +181,7 @@ class TestModifyValidation(unittest.TestCase):
             session.clear()
             result = run_async(modify([]))
             self.assertIn("No operations", result)
+            self.assertIn("Call modify with operations=[{file_path, operation, text, ...}]", result)
             session.clear()
 
     def test_invalid_on_error_fails(self) -> None:
@@ -196,7 +197,8 @@ class TestModifyValidation(unittest.TestCase):
                     "text": "hello",
                 }
             ], on_error="stop"))
-            self.assertIn("on_error", result)
+            self.assertIn("invalid 'on_error'", result)
+            self.assertIn("on_error='abort' or 'continue'", result)
             session.clear()
 
     def test_missing_file_path(self) -> None:
@@ -259,6 +261,8 @@ class TestModifyValidation(unittest.TestCase):
                 }
             ]))
             self.assertIn("missing 'match_text'", result)
+            self.assertIn("Required keys for replace", result)
+            self.assertIn("occurrence='one' or 'all'", result)
             session.clear()
 
     def test_invalid_occurrence(self) -> None:

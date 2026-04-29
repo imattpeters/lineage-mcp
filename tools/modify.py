@@ -15,6 +15,9 @@ OperationType = Literal["create", "overwrite", "append", "replace"]
 OccurrenceMode = Literal["one", "all"]
 OnErrorMode = Literal["abort", "continue"]
 
+VALID_OPERATIONS: tuple[OperationType, ...] = ("create", "overwrite", "append", "replace")
+VALID_OCCURRENCES: tuple[OccurrenceMode, ...] = ("one", "all")
+
 
 class ModifyOperation(TypedDict, total=False):
     file_path: str
@@ -30,16 +33,24 @@ class OperationResult:
     message: str
 
 
+def _tool_usage() -> str:
+    return (
+        "Call modify with operations=[{file_path, operation, text, ...}] and optional "
+        "on_error='abort' or 'continue'. Replace operations also require match_text "
+        "and may include occurrence='one' or 'all'."
+    )
+
+
 async def modify(
     operations: list[ModifyOperation],
     on_error: OnErrorMode = "abort",
 ) -> str:
     """Modify one or more text files by creating, overwriting, appending, or replacing exact text."""
     if not operations:
-        return "Error: No operations provided"
+        return f"Error: No operations provided. {_tool_usage()}"
 
     if on_error not in ("abort", "continue"):
-        return "Error: 'on_error' must be 'abort' or 'continue'"
+        return f"Error: invalid 'on_error'. {_tool_usage()}"
 
     results: list[str] = []
 
@@ -58,6 +69,25 @@ async def modify(
     return output
 
 
+def _operation_usage(operation_type: str | None = None) -> str:
+    if operation_type == "replace":
+        return (
+            "Required keys for replace: file_path, operation='replace', match_text, text. "
+            "Optional: occurrence='one' or 'all'."
+        )
+
+    if operation_type in ("create", "overwrite", "append"):
+        return (
+            f"Required keys for {operation_type}: file_path, operation='{operation_type}', text."
+        )
+
+    return (
+        "Each operation must include file_path, operation, and text. "
+        "Valid operation values: 'create', 'overwrite', 'append', 'replace'. "
+        "Replace also requires match_text and optionally occurrence='one' or 'all'."
+    )
+
+
 def _apply_operation(index: int, operation: ModifyOperation) -> OperationResult:
     file_path = operation.get("file_path")
     operation_type = operation.get("operation")
@@ -66,27 +96,42 @@ def _apply_operation(index: int, operation: ModifyOperation) -> OperationResult:
     occurrence = operation.get("occurrence", "one")
 
     if not file_path:
-        return OperationResult(False, f"Operation {index}: Error: missing 'file_path'")
-    if operation_type not in ("create", "overwrite", "append", "replace"):
-        return OperationResult(False, f"Operation {index} ({file_path}): Error: invalid 'operation'")
+        return OperationResult(
+            False,
+            f"Operation {index}: Error: missing 'file_path'. {_operation_usage(operation_type)}",
+        )
+    if operation_type not in VALID_OPERATIONS:
+        return OperationResult(
+            False,
+            f"Operation {index} ({file_path}): Error: invalid 'operation'. {_operation_usage()}",
+        )
     if text is None:
-        return OperationResult(False, f"Operation {index} ({file_path}): Error: missing 'text'")
+        return OperationResult(
+            False,
+            f"Operation {index} ({file_path}): Error: missing 'text'. {_operation_usage(operation_type)}",
+        )
 
     if operation_type == "replace":
         if match_text is None:
-            return OperationResult(False, f"Operation {index} ({file_path}): Error: missing 'match_text'")
-        if occurrence not in ("one", "all"):
-            return OperationResult(False, f"Operation {index} ({file_path}): Error: invalid 'occurrence'")
+            return OperationResult(
+                False,
+                f"Operation {index} ({file_path}): Error: missing 'match_text'. {_operation_usage('replace')}",
+            )
+        if occurrence not in VALID_OCCURRENCES:
+            return OperationResult(
+                False,
+                f"Operation {index} ({file_path}): Error: invalid 'occurrence'. Allowed values: 'one' or 'all'. {_operation_usage('replace')}",
+            )
     else:
         if match_text is not None:
             return OperationResult(
                 False,
-                f"Operation {index} ({file_path}): Error: 'match_text' is only valid for replace operations",
+                f"Operation {index} ({file_path}): Error: 'match_text' is only valid for replace operations. {_operation_usage(operation_type)}",
             )
         if "occurrence" in operation:
             return OperationResult(
                 False,
-                f"Operation {index} ({file_path}): Error: 'occurrence' is only valid for replace operations",
+                f"Operation {index} ({file_path}): Error: 'occurrence' is only valid for replace operations. {_operation_usage(operation_type)}",
             )
 
     path_result = resolve_path(file_path)

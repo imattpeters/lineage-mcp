@@ -1,6 +1,6 @@
 """Tests for session_state.py module.
 
-Tests session state management including file tracking, folder tracking,
+Tests session state management including file tracking, instruction tracking,
 and cache operations.
 """
 
@@ -43,18 +43,17 @@ class TestSessionState(unittest.TestCase):
         from session_state import SessionState
 
         state = SessionState()
-        # Should not raise
         state.untrack_file("/nonexistent/file.txt")
 
-    def test_folder_provided_tracking(self) -> None:
-        """Verify folder provided tracking works correctly."""
+    def test_instruction_content_tracking(self) -> None:
+        """Verify appended instruction tracking works correctly."""
         from session_state import SessionState
 
         state = SessionState()
 
-        self.assertFalse(state.is_folder_provided("/test/folder"))
-        state.mark_folder_provided("/test/folder")
-        self.assertTrue(state.is_folder_provided("/test/folder"))
+        self.assertFalse(state.has_appended_instruction_content("/test/folder"))
+        state.mark_instruction_content_appended("/test/folder")
+        self.assertTrue(state.has_appended_instruction_content("/test/folder"))
 
     def test_clear_resets_all_caches(self) -> None:
         """Verify clear removes all state."""
@@ -62,20 +61,20 @@ class TestSessionState(unittest.TestCase):
 
         state = SessionState()
         state.track_file("/test/file.txt", 12345, "content")
-        state.mark_folder_provided("/test/folder")
+        state.mark_instruction_content_appended("/test/folder")
 
         state.clear()
 
         self.assertEqual(len(state.mtimes), 0)
         self.assertEqual(len(state.contents), 0)
-        self.assertEqual(len(state.provided_folders), 0)
+        self.assertEqual(len(state.appended_instruction_folders), 0)
 
     def test_clear_resets_cooldown_timer(self) -> None:
         """Verify explicit clear() resets the cooldown timer."""
         from session_state import SessionState
 
         state = SessionState()
-        state.try_new_session()  # Sets timer
+        state.try_new_session()
         self.assertIsNotNone(state.last_new_session_time)
 
         state.clear()
@@ -91,14 +90,14 @@ class TestNewSessionCooldown(unittest.TestCase):
 
         state = SessionState()
         state.track_file("/test/file.txt", 12345, "content")
-        state.mark_folder_provided("/test/folder")
+        state.mark_instruction_content_appended("/test/folder")
 
         result = state.try_new_session()
 
         self.assertTrue(result)
         self.assertEqual(len(state.mtimes), 0)
         self.assertEqual(len(state.contents), 0)
-        self.assertEqual(len(state.provided_folders), 0)
+        self.assertEqual(len(state.appended_instruction_folders), 0)
         self.assertIsNotNone(state.last_new_session_time)
 
     def test_second_try_within_cooldown_is_suppressed(self) -> None:
@@ -108,13 +107,11 @@ class TestNewSessionCooldown(unittest.TestCase):
         state = SessionState()
         state.try_new_session()
 
-        # Add data after first clear
         state.track_file("/test/file.txt", 12345, "content")
 
         result = state.try_new_session()
 
         self.assertFalse(result)
-        # Data should still be there (clear was suppressed)
         self.assertIn("/test/file.txt", state.mtimes)
 
     def test_try_after_cooldown_expires_clears(self) -> None:
@@ -125,7 +122,6 @@ class TestNewSessionCooldown(unittest.TestCase):
         state = SessionState()
         state.try_new_session()
 
-        # Manually set timer to the past (beyond cooldown)
         state.last_new_session_time = time.monotonic() - 60
 
         state.track_file("/test/file.txt", 12345, "content")
@@ -142,7 +138,6 @@ class TestNewSessionCooldown(unittest.TestCase):
         state = SessionState()
         state.try_new_session()
 
-        # Explicit clear resets timer
         state.clear()
 
         state.track_file("/test/file.txt", 12345, "content")
@@ -179,7 +174,6 @@ class TestNewSessionClearCount(unittest.TestCase):
         state.try_new_session()
         self.assertEqual(state.new_session_clear_count, 1)
 
-        # Second call within cooldown - suppressed
         state.try_new_session()
         self.assertEqual(state.new_session_clear_count, 1)
 
@@ -193,17 +187,16 @@ class TestNewSessionClearCount(unittest.TestCase):
 
     def test_clear_count_survives_clear(self) -> None:
         """Verify clear count is never reset by clear() or try_new_session()."""
-        import time
         from session_state import SessionState
 
         state = SessionState()
-        state.try_new_session()  # count = 1
+        state.try_new_session()
         self.assertEqual(state.new_session_clear_count, 1)
 
-        state.clear()  # count = 2
+        state.clear()
         self.assertEqual(state.new_session_clear_count, 2)
 
-        state.try_new_session()  # count = 3 (cooldown was reset by clear)
+        state.try_new_session()
         self.assertEqual(state.new_session_clear_count, 3)
 
     def test_should_include_base_instruction_files_false_initially(self) -> None:
@@ -227,12 +220,9 @@ class TestNewSessionClearCount(unittest.TestCase):
         from session_state import SessionState
 
         state = SessionState()
-        state.try_new_session()  # count = 1
-
-        # Simulate cooldown expiry
+        state.try_new_session()
         state.last_new_session_time = time.monotonic() - 60
-
-        state.try_new_session()  # count = 2
+        state.try_new_session()
         self.assertTrue(state.should_include_base_instruction_files())
 
     def test_should_include_base_instruction_files_true_via_explicit_clear(self) -> None:
@@ -240,8 +230,8 @@ class TestNewSessionClearCount(unittest.TestCase):
         from session_state import SessionState
 
         state = SessionState()
-        state.try_new_session()  # count = 1
-        state.clear()  # count = 2
+        state.try_new_session()
+        state.clear()
         self.assertTrue(state.should_include_base_instruction_files())
 
 

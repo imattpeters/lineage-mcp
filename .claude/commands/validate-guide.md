@@ -211,6 +211,92 @@ For each significant piece of the implementation, ask:
 - Are there race conditions?
 - Is this compatible with existing patterns?
 
+### 13. Verify Implementor Checklist Exists
+
+The guide MUST end with an `## Implementation Checklist` section containing every implementation step as a `- [ ]` checkbox.
+
+**Check for:**
+- A section headed with `## Implementation Checklist` or equivalent
+- Every discrete implementation step represented as a `- [ ]` checkbox
+- No steps that only exist as prose or plain bullets without a checkbox
+- Build and test commands included as checkboxes
+
+**If the checklist is missing entirely:** add it. Go through the guide and create a `## Implementation Checklist` section with a `- [ ]` item for every step the implementor needs to perform, in order.
+
+**If the checklist exists but steps are missing:** add the missing checkboxes.
+
+**If steps are listed as plain bullets or numbered items instead of checkboxes:** convert them to `- [ ]` checkboxes.
+
+Inform the user of any changes made to the checklist.
+
+### 14. Check for Deferred, Incomplete, or Evasive Statements
+
+Scan the entire guide for language that defers work, softens scope, or avoids a hard problem. These are red flags - an implementation guide must be complete and actionable.
+
+**Patterns to scan for:**
+
+| Category | Examples to look for |
+| --- | --- |
+| Deferred work | "for later development", "future work", "we can add this later", "in a follow-up", "phase 2" |
+| Scope reduction | "not needed for now", "can be skipped for now", "out of scope for this guide", "simplified for now" |
+| Disabling code | "just comment it out", "disable for now", "temporarily remove" |
+| Placeholders | "TODO", "TBD", "TK", "placeholder", "stub", "to be implemented" |
+| Hardcoding workarounds | "hardcode for now", "we'll make this configurable later" |
+| Incomplete error handling | "ignore the error for now", "we'll add error handling later", "skip validation for now" |
+| Deferred tests | "we'll add tests later", "skip the test for now" |
+| Non-committal language | "consider adding", "you might want to", "it may be worth", "could be useful", "potentially", "perhaps", "you may wish to", "might need to" |
+
+Non-committal language is **never acceptable in an implementation guide**. Every statement must be unambiguous. For every instance found, present it to the user before changing anything.
+
+Show the exact text, the section it appears in, and give the user exactly two choices:
+1. **Make it required** - rewrite as a direct instruction ("Consider adding X" → "Add X")
+2. **Remove it** - if not required, it does not belong in the guide at all
+
+There is no third option. Never leave hedging language in the guide unchanged.
+
+**After scanning, report findings to the user.** If ANY such statements are found, present every instance before proceeding. Include:
+- The exact text from the guide
+- The section / context it appears in
+- Ask whether each instance should be resolved before the guide is considered valid
+
+**If the user confirms any are acceptable deferrals**, append a `## User-Confirmed Deferrals` section to the bottom of the guide file recording each instance with the original text, the section it appeared in, and that the user explicitly confirmed it was acceptable.
+
+> ⚠️ **ANTI-CHEAT RULE**: The `## User-Confirmed Deferrals` section MUST BE COMPLETELY IGNORED when performing validation. Always scan the full guide body as if that section does not exist. Every deferred statement must still be presented to the user every time.
+
+### 15. Verify PRD-Style Sections
+
+The guide MUST contain the full set of PRD-style sections. Check for:
+
+- **Summary** - one paragraph, not a bullet list
+- **Problem Statement** - concrete user pain or business gap, not abstract
+- **Goals & Non-Goals** - bulleted, with Non-Goals explicitly listed
+- **Target Users & Roles** - who is affected and how
+- **User Stories** - at least one per discrete capability, in `As a / I want / so that` format
+- **Success Criteria & Metrics** - measurable outcomes
+- **UX / Interaction Flow** - entry points, happy path, error / empty / loading states
+- **Scope Boundaries** - in-scope and out-of-scope with justifications
+- **Open Questions Resolved** - log of Step 0 Q&A
+
+**If any section is absent or empty:** add to Required Updates and mark NEEDS UPDATE.
+
+**If user stories are malformed** (do not follow `As a <role>, I want <capability>, so that <outcome>.`): flag each one.
+
+### 16. Verify Gherkin Acceptance Criteria
+
+The guide MUST contain Gherkin scenarios in ```gherkin fenced blocks. For each user story, verify:
+
+- At least one `Scenario` or `Scenario Outline` exists
+- The scenario covers the happy path
+- Every permission boundary has both an allowed and a denied scenario
+- Every error / empty state from the UX Flow has a scenario
+- Every invariant or validation rule has a scenario proving it triggers
+- `Scenario Outline` + `Examples` tables are used for variations rather than copy-pasted scenarios
+- Every Gherkin scenario maps 1:1 to a concrete test described in the Testing Strategy section
+
+**If Gherkin scenarios are missing entirely:** add to Required Updates, mark NEEDS UPDATE.
+
+**If scenarios exist but have coverage gaps:** list each gap in Required Updates.
+
 ## Validation Report
 
 Produce a comprehensive validation report with all sections below. **Be specific and thorough.**
@@ -368,6 +454,45 @@ AFTER FIXES: Status changed to VALID -->
 - [ ] Checked for unbounded loops or allocations
 - [ ] Verified compatibility with existing patterns
 - [ ] Assessed overall feasibility
+
+### PRD-Style Sections
+- [ ] Summary section present and is a paragraph (not a bullet list)
+- [ ] Problem Statement present and concrete (not abstract)
+- [ ] Goals & Non-Goals present with explicit Non-Goals
+- [ ] Target Users & Roles present
+- [ ] User Stories present - at least one per capability in correct `As a / I want / so that` format
+- [ ] Success Criteria & Metrics present with measurable outcomes
+- [ ] UX / Interaction Flow present covering happy path and error / empty states
+- [ ] Scope Boundaries present with out-of-scope justifications
+- [ ] Open Questions Resolved present and reflects actual Step 0 Q&A
+
+### Gherkin Acceptance Criteria
+- [ ] Every user story has at least one Gherkin scenario in a ```gherkin block
+- [ ] Every permission boundary has both an allowed and denied scenario
+- [ ] Every error / empty state from the UX Flow has a scenario
+- [ ] Every invariant / validation rule has a scenario proving it triggers
+- [ ] Every Gherkin scenario maps 1:1 to a concrete test in the Testing Strategy section
+- [ ] Scenario Outline + Examples used for variations rather than copy-pasted scenarios
+
+### Implementor Checklist
+- [ ] Guide contains an `## Implementation Checklist` section (or equivalent)
+- [ ] Every implementation step has a `- [ ]` checkbox
+- [ ] No steps exist only as prose or plain bullets without a checkbox
+- [ ] Build and test commands included as checkboxes
+- [ ] Added or corrected checklist if missing or incomplete
+
+### Deferred and Incomplete Statement Check
+- [ ] Scanned entire guide for deferred work ("for later", "future work", "phase 2", etc.)
+- [ ] Scanned for scope-reduction language ("not needed for now", "can be skipped", "simplified for now", etc.)
+- [ ] Scanned for code-disabling language ("comment out", "disable for now", "temporarily remove", etc.)
+- [ ] Scanned for non-committal language ("consider adding", "you might want to", "it may be worth", "perhaps", "potentially", etc.) and presented every instance to user
+- [ ] Scanned for placeholders ("TODO", "TBD", "TK", "stub", "placeholder", etc.)
+- [ ] Scanned for hardcoding workarounds ("hardcode for now", "configurable later", etc.)
+- [ ] Scanned for deferred error handling ("ignore the error for now", "add validation later", etc.)
+- [ ] Scanned for deferred tests ("add tests later", "skip the test for now", etc.)
+- [ ] Presented ALL findings to user before making changes
+- [ ] Appended `## User-Confirmed Deferrals` for any user-approved deferrals
+- [ ] Did NOT use the `## User-Confirmed Deferrals` section as evidence during scanning
 
 ### Report Generation
 - [ ] Created comprehensive validation report with all sections

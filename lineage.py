@@ -255,8 +255,8 @@ async def delete(file_path: str, ctx: Context = None) -> str:
 async def clear(ctx: Context = None) -> str:
     """Clear all session caches.
 
-    Resets file tracking and instruction file tracking
-    (provided_folders). Use when instruction files need to be re-provided
+    Resets file tracking and appended instruction tracking
+    (appended_instruction_folders). Use when instruction files need to be re-provided
     after context compaction.
 
     Cache is also cleared automatically via the system tray or client hooks (SessionStart, PreCompact).

@@ -1,7 +1,7 @@
 """Tests for instruction_files.py module.
 
 Tests instruction file discovery including parent traversal,
-priority order, and deduplication.
+priority order, and visibility behavior.
 """
 
 import sys
@@ -24,7 +24,6 @@ class TestInstructionFileDiscovery(unittest.TestCase):
         with TempWorkspace() as ws:
             from instruction_files import find_instruction_files_in_parents
 
-            # Create structure: parent/AGENTS.md, parent/child/file.txt
             parent = ws.create_dir("parent")
             agents_md = ws.create_file("parent/AGENTS.md", "# Instructions")
             test_file = ws.create_file("parent/child/test.txt", "content")
@@ -41,12 +40,10 @@ class TestInstructionFileDiscovery(unittest.TestCase):
             from instruction_files import find_instruction_files_in_parents
             from session_state import session
 
-            # Ensure we're simulating a fresh session (no compaction yet)
             old_count = session.new_session_clear_count
             session.new_session_clear_count = 0
 
             try:
-                # Create AGENTS.md at base and a file at base
                 ws.create_file("AGENTS.md", "# Root Instructions")
                 test_file = ws.create_file("test.txt", "content")
 
@@ -61,14 +58,12 @@ class TestInstructionFileDiscovery(unittest.TestCase):
         with TempWorkspace() as ws:
             from instruction_files import find_instruction_files_in_parents
 
-            # Create nested structure with instruction files at each level
             ws.create_file("level1/AGENTS.md", "# Level 1")
             ws.create_file("level1/level2/AGENTS.md", "# Level 2")
             test_file = ws.create_file("level1/level2/level3/test.txt", "content")
 
             found = find_instruction_files_in_parents(test_file)
 
-            # Should find both (not base dir)
             self.assertEqual(len(found), 2)
 
 
@@ -80,7 +75,6 @@ class TestInstructionFilePriority(unittest.TestCase):
         with TempWorkspace() as ws:
             from instruction_files import find_instruction_files_in_parents
 
-            # Create both AGENTS.md and CLAUDE.md in same directory
             parent = ws.create_dir("parent")
             agents_md = ws.create_file("parent/AGENTS.md", "# AGENTS")
             ws.create_file("parent/CLAUDE.md", "# CLAUDE")
@@ -88,16 +82,15 @@ class TestInstructionFilePriority(unittest.TestCase):
 
             found = find_instruction_files_in_parents(test_file)
 
-            # Should only find AGENTS.md (higher priority)
             self.assertEqual(len(found), 1)
             self.assertEqual(found[0][1], agents_md)
 
 
-class TestInstructionFileDeduplication(unittest.TestCase):
-    """Tests for preventing duplicate instruction file inclusion."""
+class TestInstructionFileVisibility(unittest.TestCase):
+    """Tests for content append vs path-only visibility."""
 
-    def test_folder_not_provided_twice(self) -> None:
-        """Verify same folder instruction file is only included once."""
+    def test_second_read_shows_path_after_content_was_appended(self) -> None:
+        """Verify later reads still advertise the selected instruction file path."""
         with TempWorkspace() as ws:
             from instruction_files import (
                 find_instruction_files_in_parents,
@@ -107,18 +100,42 @@ class TestInstructionFileDeduplication(unittest.TestCase):
 
             session.clear()
 
-            ws.create_file("parent/AGENTS.md", "# Instructions")
+            agents_path = ws.create_file("parent/AGENTS.md", "# Instructions")
             test_file = ws.create_file("parent/child/test.txt", "content")
 
-            # First time: should include
             found = find_instruction_files_in_parents(test_file)
             content1 = include_instruction_file_content(found)
             self.assertIn("Instructions", content1)
+            self.assertIn(f"[Appending {agents_path}]", content1)
 
-            # Second time: folder already provided
             found = find_instruction_files_in_parents(test_file)
             content2 = include_instruction_file_content(found)
-            self.assertEqual(content2, "")
+            self.assertIn("[Instruction file available]", content2)
+            self.assertIn(str(agents_path), content2)
+            self.assertNotIn("# Instructions", content2)
+
+            session.clear()
+
+    def test_priority_file_path_is_used_for_path_only_output(self) -> None:
+        """Verify AGENTS.md remains the surfaced path when both files exist."""
+        with TempWorkspace() as ws:
+            from instruction_files import (
+                find_instruction_files_in_parents,
+                include_instruction_file_content,
+            )
+            from session_state import session
+
+            session.clear()
+
+            agents_path = ws.create_file("parent/AGENTS.md", "# AGENTS")
+            claude_path = ws.create_file("parent/CLAUDE.md", "# CLAUDE")
+            test_file = ws.create_file("parent/child/test.txt", "content")
+
+            include_instruction_file_content(find_instruction_files_in_parents(test_file))
+            content2 = include_instruction_file_content(find_instruction_files_in_parents(test_file))
+
+            self.assertIn(str(agents_path), content2)
+            self.assertNotIn(str(claude_path), content2)
 
             session.clear()
 
@@ -132,7 +149,6 @@ class TestBaseDirectoryInstructionFiles(unittest.TestCase):
             from instruction_files import find_instruction_files_in_parents
             from session_state import session
 
-            # Reset to fresh state
             old_count = session.new_session_clear_count
             session.new_session_clear_count = 0
 
@@ -200,14 +216,13 @@ class TestBaseDirectoryInstructionFiles(unittest.TestCase):
                 found = find_instruction_files_in_parents(test_file)
 
                 self.assertEqual(len(found), 2)
-                # Parent dir file found first, then base dir appended
                 self.assertEqual(found[0][1], parent_agents)
                 self.assertEqual(found[1][1], base_agents)
             finally:
                 session.new_session_clear_count = old_count
 
-    def test_base_dir_deduped_via_provided_folders(self) -> None:
-        """Verify base dir instruction file goes through provided_folders dedup."""
+    def test_base_dir_second_read_shows_path_after_initial_append(self) -> None:
+        """Verify base dir instruction files remain visible by path after append."""
         with TempWorkspace() as ws:
             from instruction_files import (
                 find_instruction_files_in_parents,
@@ -217,24 +232,25 @@ class TestBaseDirectoryInstructionFiles(unittest.TestCase):
 
             old_count = session.new_session_clear_count
             session.new_session_clear_count = 2
-            session.provided_folders.clear()
+            session.appended_instruction_folders.clear()
 
             try:
-                ws.create_file("AGENTS.md", "# Root Instructions")
+                base_agents = ws.create_file("AGENTS.md", "# Root Instructions")
                 test_file = ws.create_file("test.txt", "content")
 
-                # First time: should include base dir
-                found = find_instruction_files_in_parents(test_file)
-                content1 = include_instruction_file_content(found)
+                content1 = include_instruction_file_content(
+                    find_instruction_files_in_parents(test_file)
+                )
                 self.assertIn("Root Instructions", content1)
 
-                # Second time: base dir already provided, should be empty
-                found = find_instruction_files_in_parents(test_file)
-                content2 = include_instruction_file_content(found)
-                self.assertEqual(content2, "")
+                content2 = include_instruction_file_content(
+                    find_instruction_files_in_parents(test_file)
+                )
+                self.assertIn(str(base_agents), content2)
+                self.assertIn("[Instruction file available]", content2)
             finally:
                 session.new_session_clear_count = old_count
-                session.provided_folders.clear()
+                session.appended_instruction_folders.clear()
 
 
 if __name__ == "__main__":

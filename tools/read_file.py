@@ -7,7 +7,7 @@ from file_watcher import format_changed_files_section
 from instruction_files import (
     find_instruction_files_in_parents,
     include_instruction_file_content,
-    mark_instruction_folder_if_applicable,
+    mark_instruction_content_appended_if_applicable,
 )
 from path_utils import get_base_dir, get_file_mtime_ms, resolve_path
 from session_state import session
@@ -188,7 +188,7 @@ async def read_file(
     session.track_file(file_path_str, mtime, full_content)
 
     # Mark instruction folder if this is an instruction file read directly
-    mark_instruction_folder_if_applicable(full_path)
+    mark_instruction_content_appended_if_applicable(full_path)
 
     # Pre-generate overhead sections (needed for budget calculation)
     # Include any pending overhead from a previous read of this same file that couldn't fit

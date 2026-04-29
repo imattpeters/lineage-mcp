@@ -215,15 +215,15 @@ async def generate_example_responses() -> str:
             examples.append(result)
             examples.append("")
 
-            # Test reading instruction file directly (should add folder to provided cache)
+            # Test reading instruction file directly (should mark folder as already appended)
             examples.append(">>> read_file('src/AGENTS.md')  # Direct instruction file read")
             examples.append("")
             result = await read_file("src/AGENTS.md")
             examples.append(result)
             examples.append("")
 
-            # Read another file - src folder instruction file should NOT be re-appended
-            examples.append(">>> read_file('src/api/handler.ts')  # Instruction files not re-appended")
+            # Read another file - src folder instruction file should still be visible by path
+            examples.append(">>> read_file('src/api/handler.ts')  # Instruction file path still visible")
             examples.append("")
             result = await read_file("src/api/handler.ts")
             examples.append(result)
@@ -231,7 +231,7 @@ async def generate_example_responses() -> str:
 
             # Test priority order - api folder has CLAUDE.md (should be picked over AGENTS.md)
             # Reset caches to see the instruction file again
-            session.provided_folders.clear()
+            session.appended_instruction_folders.clear()
             examples.append(">>> read_file('src/api/types.ts')  # CLAUDE.md is higher priority in api folder")
             examples.append("")
             result = await read_file("src/api/types.ts")
@@ -509,7 +509,7 @@ async def generate_example_responses() -> str:
     examples.append("Cache is cleared via the system tray or client hooks, or explicitly via clear_cache().")
     examples.append("All tools include [CHANGED_FILES] section when external changes are detected.")
     examples.append("Changes are only reported once, then cache is updated.")
-    examples.append("Instruction files shown once per folder per session (clear() resets).")
+    examples.append("Instruction file content is appended once per folder per session; later reads still show the selected file path (clear() resets).")
     examples.append(f"Configured instruction file names: {INSTRUCTION_FILE_NAMES}")
     examples.append("")
 

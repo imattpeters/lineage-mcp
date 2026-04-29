@@ -9,7 +9,7 @@
 
 ### [Read the Blog Post](https://www.mattpeters.co.uk/blog/04-lineage-mcp)
 
-I've published a post talking about why I made this tool, Take a look if your interested.
+I've published a post talking about why I made this tool. Take a look if you're interested.
 
 ## What is Lineage MCP?
 
@@ -24,7 +24,7 @@ Lineage MCP is a file operation server for LLM coding agents that solves two cri
 | Feature                   | Description                                                     |
 | ------------------------- | --------------------------------------------------------------- |
 | **File Operations**       | List, search, read, modify, and delete files                    |
-| **Batch Operations**      | Read up to 5 files or apply multiple edits in a single call     |
+| **Batch Modify**          | Apply multiple create/overwrite/append/replace operations in a single call |
 | **Change Detection**      | Line-level diff detection for externally modified files         |
 | **Instruction Discovery** | Auto-finds AGENTS.md, CLAUDE.md, etc. in parent directories     |
 | **Security**              | Path traversal protection keeps operations within the workspace |
@@ -148,7 +148,7 @@ OpenCode uses a [plugin system](https://opencode.ai/docs/plugins) for hooks. See
 | ------------ | ------------------------------ | ------------------------------------------------------ |
 | `list`       | List directory contents        | `path` (optional)                                      |
 | `search`     | Search files by glob pattern   | `pattern`, `path` (optional)                           |
-| `read`       | Read file with change tracking | `file_path`, `show_line_numbers`, `offset`, `limit`    |
+| `read`       | Read file with change tracking | `file_path`, `show_line_numbers`, `offset`, `limit`, `cursor` |
 | `modify` | Modify one or more files | `operations`, `on_error` (optional) |
 | `delete`     | Delete file or empty directory | `file_path`                                            |
 | `clear`      | Clear all session caches       | (none)                                                 |
@@ -268,7 +268,7 @@ The response includes:
 # Project-wide instructions
 ```
 
-**Note:** Instruction files at the workspace root (BASE_DIR) are excluded - they're already visible to most coding agents.
+**Note:** Instruction files at the workspace root (BASE_DIR) are excluded on the first session — they're already visible to most coding agents. After context compaction (when the session cache has been cleared at least twice), they are automatically included again since the LLM may have lost that context.
 
 ### Configuration
 
@@ -390,6 +390,29 @@ Add the plugin type dependency to `.opencode/package.json`:
   }
 }
 ```
+
+## System Tray
+
+Lineage MCP includes an optional system tray application (`lineage-mcp-tray`) that provides real-time visibility and control over running sessions.
+
+```bash
+cd lineage-mcp-tray
+pip install -e .
+python -m lineage_tray
+```
+
+The tray connects to all running MCP server instances via a named pipe (Windows) or Unix socket (macOS/Linux) and shows:
+
+- Active sessions grouped by workspace
+- Number of files tracked per session
+- Most recent tool call
+- Controls: **Clear Cache**, **Interrupt**, and **Resume**
+
+### Interrupt / Resume
+
+Clicking **Interrupt** in the tray immediately halts the LLM's tool calls. The next tool invocation returns only the interrupt message and performs no operations. The LLM must stop and check with the user. Click **Resume** to restore normal operation.
+
+The interrupt message is configurable via `interruptMessage` in `appsettings.json`.
 
 ## Security
 

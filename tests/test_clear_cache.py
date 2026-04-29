@@ -24,19 +24,15 @@ class TestClearCache(unittest.TestCase):
             from session_state import session
             from tools.clear_cache import clear_cache
 
-            # Track some files and folders
             session.track_file("/some/file.txt", 12345, "content")
-            session.mark_folder_provided("/some/folder")
+            session.mark_instruction_content_appended("/some/folder")
 
             result = run_async(clear_cache())
 
-            # Should return success message
             self.assertIn("Cache cleared", result)
-
-            # All caches should be cleared
             self.assertEqual(len(session.mtimes), 0)
             self.assertEqual(len(session.contents), 0)
-            self.assertEqual(len(session.provided_folders), 0)
+            self.assertEqual(len(session.appended_instruction_folders), 0)
 
             session.clear()
 

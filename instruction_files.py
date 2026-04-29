@@ -4,12 +4,22 @@ Handles discovery and inclusion of AGENTS.md, CLAUDE.md, and other
 instruction files from parent directories.
 """
 
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List
 
 from config import INSTRUCTION_FILE_NAMES
 from path_utils import get_base_dir
 from session_state import session
+
+
+@dataclass(frozen=True)
+class InstructionFileRenderItem:
+    """A single instruction file and how it should be surfaced in a read."""
+
+    folder_path: Path
+    file_path: Path
+    include_content: bool
 
 
 def find_instruction_files_in_parents(target_path: Path) -> List[tuple[Path, Path]]:
@@ -70,59 +80,82 @@ def find_instruction_files_in_parents(target_path: Path) -> List[tuple[Path, Pat
     return found
 
 
-def include_instruction_file_content(instruction_files: List[tuple[Path, Path]]) -> str:
-    """Generate response sections for instruction files.
+def plan_instruction_file_output(
+    instruction_files: List[tuple[Path, Path]],
+) -> List[InstructionFileRenderItem]:
+    """Decide whether each discovered instruction file is content or path-only.
 
-    Reads instruction files, checks if folder has already been provided in session,
-    updates cache, and returns formatted response sections.
-
-    Args:
-        instruction_files: List of (folder_path, file_path) tuples.
-
-    Returns:
-        Formatted string with [INSTRUCTION FILE] sections, or empty string if none.
+    A folder whose instruction content has already been appended in this session
+    is still surfaced, but only by path so the agent knows the file exists.
     """
-    output: List[str] = []
+    render_items: List[InstructionFileRenderItem] = []
 
     for folder_path, file_path in instruction_files:
         if not file_path.is_file():
             continue
 
-        folder_str = str(folder_path)
+        render_items.append(
+            InstructionFileRenderItem(
+                folder_path=folder_path,
+                file_path=file_path,
+                include_content=not session.has_appended_instruction_content(
+                    str(folder_path)
+                ),
+            )
+        )
 
-        # Check if we've already provided an instruction file for this folder
-        if session.is_folder_provided(folder_str):
-            # Already provided - skip (only clear() resets this)
+    return render_items
+
+
+def render_instruction_file_output(
+    render_items: List[InstructionFileRenderItem],
+) -> str:
+    """Render instruction file output for a read response."""
+    output: List[str] = []
+    available_paths: List[str] = []
+
+    for item in render_items:
+        if item.include_content:
+            try:
+                content = item.file_path.read_text(encoding="utf-8")
+                output.append(f"\n[Appending {item.file_path}]")
+                output.append(content)
+            except (OSError, UnicodeDecodeError):
+                output.append(f"\n[Appending {item.file_path}]")
+                output.append("[File Corrupted]")
+
+            session.mark_instruction_content_appended(str(item.folder_path))
             continue
 
-        # New folder; include its instruction file
-        try:
-            content = file_path.read_text(encoding="utf-8")
+        available_paths.append(str(item.file_path))
 
-            # Format the response section
-            output.append(f"\n[Appending {file_path}]")
-            output.append(content)
+    if available_paths:
+        if len(available_paths) == 1:
+            output.append("\n[Instruction file available]")
+        else:
+            output.append("\n[Instruction files available]")
 
-            # Mark folder as provided
-            session.mark_folder_provided(folder_str)
-
-        except (OSError, UnicodeDecodeError):
-            # File is corrupted or unreadable
-            output.append(f"\n[Appending {file_path}]")
-            output.append("[File Corrupted]")
-            session.mark_folder_provided(folder_str)
+        for file_path in available_paths:
+            output.append(f"\n- {file_path}")
 
     return "".join(output)
 
 
-def mark_instruction_folder_if_applicable(target_file: Path) -> None:
-    """Mark an instruction file's folder as provided if applicable.
+def include_instruction_file_content(instruction_files: List[tuple[Path, Path]]) -> str:
+    """Generate response sections for instruction files."""
+    render_items = plan_instruction_file_output(instruction_files)
+    return render_instruction_file_output(render_items)
+
+
+def mark_instruction_content_appended_if_applicable(target_file: Path) -> None:
+    """Mark an instruction file's folder as appended if applicable.
 
     Call this after reading/writing/editing an instruction file to prevent
-    it from being re-appended on subsequent reads.
+    it from being re-appended on subsequent reads while still surfacing
+    its path to the agent.
 
     Args:
         target_file: Path to the file being operated on.
     """
     if target_file.name in INSTRUCTION_FILE_NAMES:
-        session.mark_folder_provided(str(target_file.parent))
+        session.mark_instruction_content_appended(str(target_file.parent))

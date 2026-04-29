@@ -25,12 +25,12 @@ docker build -t lineage-mcp . && docker run -v /your/workspace:/data lineage-mcp
 
 | File | Purpose | Key Features |
 |------|---------|--------------|
-| `lineage.py` | MCP server entry point | FastMCP instance, 8 tool registrations, tray client init |
+| `lineage.py` | MCP server entry point | FastMCP instance, 6 tool registrations, tray client init |
 | `config.py` | Configuration management | `appsettings.json` loader, per-client overrides, interrupt messages |
-| `session_state.py` | Session-scoped state | `SessionState` dataclass with mtimes, contents, provided_folders, interruption state |
+| `session_state.py` | Session-scoped state | `SessionState` dataclass with mtimes, contents, appended_instruction_folders, pending_overhead, interruption state |
 | `path_utils.py` | Path validation | `resolve_path()`, traversal protection, `allowFullPaths` support |
 | `file_watcher.py` | Change detection | `difflib.unified_diff()` for line-level change ranges |
-| `instruction_files.py` | AGENTS.md discovery | Walks parent dirs, caches provided folders |
+| `instruction_files.py` | AGENTS.md discovery | Walks parent dirs, caches `appended_instruction_folders` |
 | `tray_client.py` | Tray IPC client | Named pipe connection, session registration, command handling |
 
 ### Tool Implementations (tools/)
@@ -74,16 +74,18 @@ Cache clearing is handled automatically:
 ```python
 @dataclass
 class SessionState:
-    mtimes: Dict[str, int]              # {abs_path: mtime_ms}
-    contents: Dict[str, str]            # {abs_path: full_content}
-    provided_folders: set[str]          # Folders where instruction files shown
-    last_new_session_time: float | None # Monotonic timestamp
-    new_session_clear_count: int        # Never reset (0, 1, 2+...)
-    interrupted: bool                   # Set via tray Interrupt action
+    mtimes: Dict[str, int]                  # {abs_path: mtime_ms}
+    contents: Dict[str, str]                # {abs_path: full_content}
+    appended_instruction_folders: set[str]  # Folders whose instruction files were shown
+    last_new_session_time: float | None     # Monotonic timestamp
+    new_session_clear_count: int            # Never reset (0, 1, 2+...)
+    interrupted: bool                       # Set via tray Interrupt action
+    pending_overhead: Dict[str, str]        # Instruction file content spilled across reads
 
-    def clear(self) -> None: ...                    # Unconditional
+    def clear(self) -> None: ...                    # Unconditional; also clears pending_overhead
     def try_new_session(self) -> bool: ...          # With 30s cooldown
     def should_include_base_instruction_files(self) -> bool: ...  # count >= 2
+    def resume(self) -> None: ...                   # Sets interrupted = False
 ```
 
 ### Path Resolution
@@ -353,7 +355,7 @@ Removes files or **empty** directories (uses `rmdir()`, not `rmtree()`).
 clear() -> str
 ```
 
-Unconditional cache clear. Resets: `mtimes`, `contents`, `provided_folders`, and cooldown timer.
+Unconditional cache clear. Resets: `mtimes`, `contents`, `appended_instruction_folders`, `pending_overhead`, and cooldown timer.
 
 ## 📝 Git Commit Messages (Semantic Versioning)
 
@@ -408,7 +410,7 @@ This is a **public repository**. Before ANY git command:
 ### Instruction Files
 
 - Priority order from `appsettings.json`, first match per folder
-- Folder tracked in `provided_folders` → never shown again (until cache is cleared)
+- Folder tracked in `appended_instruction_folders` → never shown again (until cache is cleared)
 - BASE_DIR files excluded on first session, included after compaction
 
 ## ⚙️ Configuration (appsettings.json)
@@ -422,7 +424,8 @@ This is a **public repository**. Before ANY git command:
   "allowFullPaths": false,
   "clientOverrides": {
     "OpenCode": { "readCharLimit": 50000 },
-    "Cursor": { "readCharLimit": 15000 }
+    "Visual Studio Code": { "readCharLimit": 80000 },
+    "gemini-cli-mcp-client": { "readCharLimit": 190000 }
   },
   "interruptMessage": "..."
 }

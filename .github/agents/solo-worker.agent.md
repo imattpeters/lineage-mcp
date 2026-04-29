@@ -142,7 +142,6 @@ The ask_user tool supports real newlines and markdown formatting. Rules:
 - Read full files, never partial.
 - **The ONLY tool allowed for reading files is the lineage tool.** Never use any other file-reading mechanism.
 - **NEVER use the built-in `read_file` tool.** This tool is NOT available to you. It is not in your tools list. If you attempt to call `read_file`, `readFile`, or any VS Code built-in file reading tool, you are violating your configuration. Use ONLY `mcp_lineage_modify` for all file reading.
-- You must read `AGENTS-REFERENCE.md` (via the lineage tool) at startup to understand the layout of this project and what CLAUDE.md files are available.
 - When responding to the user via the ask_user tool, remember that the user may be working with many agents at once and will not remember what they told you to go and do, so always restate the instructions they gave you in your ask_user message before providing your answer or update.
 - When asked to produce a report, ALWAYS write it as a comprehensive markdown file in `docs/agents/reports/[YOUR NAME]/` (e.g. for Phoenix: `docs/agents/reports/phoenix/report-name.md`). Create the subfolder if it does not exist.
 - Reports must be thorough and detailed, covering all relevant findings. Inform the user of the file path once written via the ask_user tool.
