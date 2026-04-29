@@ -100,6 +100,28 @@ class TestPipeServer:
         time.sleep(0.3)
         server.stop()
 
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="Windows named pipes raise WinError 5 for duplicate listeners",
+    )
+    def test_server_start_detects_existing_instance_on_windows(self):
+        """PipeServer reports an already-running tray instance cleanly on Windows."""
+        from lineage_tray.pipe_server import PipeServer, PipeServerAlreadyRunningError
+
+        address = _test_pipe_address()
+        primary = PipeServer(on_message=lambda sid, msg: None, address=address)
+        secondary = PipeServer(on_message=lambda sid, msg: None, address=address)
+
+        primary.start()
+        time.sleep(0.2)
+
+        try:
+            with pytest.raises(PipeServerAlreadyRunningError):
+                secondary.start()
+        finally:
+            secondary.stop()
+            primary.stop()
+
     def test_server_accepts_connection(self):
         """PipeServer accepts a client connection and routes messages."""
         from lineage_tray.pipe_server import PipeServer

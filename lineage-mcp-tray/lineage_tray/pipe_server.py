@@ -10,7 +10,7 @@ import os
 import sys
 import threading
 import time
-from multiprocessing.connection import Listener, wait
+from multiprocessing.connection import Client, Listener, wait
 from typing import TYPE_CHECKING, Callable
 
 if TYPE_CHECKING:
@@ -36,6 +36,10 @@ def get_pipe_address() -> str:
 # Default pipe address and auth key
 PIPE_ADDRESS = get_pipe_address()
 PIPE_AUTHKEY = b"lineage-mcp-tray-v1"
+
+
+class PipeServerAlreadyRunningError(RuntimeError):
+    """Raised when another tray process already owns the pipe address."""
 
 
 class PipeServer:
@@ -66,6 +70,15 @@ class PipeServer:
         self._running = False
         self._lock = threading.Lock()
 
+    def _address_has_live_server(self) -> bool:
+        """Return True when another process is actively serving this address."""
+        try:
+            conn = Client(self.address, authkey=self.authkey)
+            conn.close()
+            return True
+        except (ConnectionRefusedError, FileNotFoundError, OSError):
+            return False
+
     def start(self) -> None:
         """Start the pipe server in background threads.
 
@@ -84,7 +97,19 @@ class PipeServer:
             except OSError:
                 logger.warning("Could not remove stale socket: %s", self.address)
 
-        self.listener = Listener(self.address, authkey=self.authkey)
+        try:
+            self.listener = Listener(self.address, authkey=self.authkey)
+        except OSError as exc:
+            self._running = False
+            if self._address_has_live_server():
+                logger.info(
+                    "Pipe server already running on %s; duplicate tray instance will exit",
+                    self.address,
+                )
+                raise PipeServerAlreadyRunningError(
+                    f"Pipe server already running on {self.address}"
+                ) from exc
+            raise
 
         # Thread 1: Accept new connections
         threading.Thread(

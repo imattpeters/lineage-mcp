@@ -14,7 +14,7 @@ from lineage_tray.actions import clear_by_filter
 from lineage_tray.icon import create_tray_icon, create_tray_icon_with_badge
 from lineage_tray.menu_builder import build_menu
 from lineage_tray.message_log import MessageLog
-from lineage_tray.pipe_server import PipeServer
+from lineage_tray.pipe_server import PipeServer, PipeServerAlreadyRunningError
 from lineage_tray.session_store import CompactionEvent, SessionStore
 
 logger = logging.getLogger("lineage_tray.app")
@@ -202,8 +202,17 @@ class TrayApp:
         threading.excepthook = _thread_excepthook
 
         def setup(icon: pystray.Icon) -> None:
+            try:
+                self.pipe_server.start()
+            except PipeServerAlreadyRunningError:
+                self._stopping = True
+                logger.info(
+                    "Another lineage-mcp-tray instance is already running; exiting duplicate process"
+                )
+                icon.stop()
+                return
+
             icon.visible = True
-            self.pipe_server.start()
             logger.info("Tray icon visible, pipe server started")
 
         try:
