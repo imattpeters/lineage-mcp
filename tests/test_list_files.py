@@ -7,6 +7,9 @@ nested directories, and error handling.
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+
+from path_utils import get_file_mtime_ms
 
 # Add parent directory to path for module imports
 _parent_dir = str(Path(__file__).parent.parent)
@@ -126,6 +129,37 @@ class TestListFilesAllowFullPaths(unittest.TestCase):
 class TestListFilesSessionManagement(unittest.TestCase):
     """Tests for session state management during list operations."""
 
+    def test_list_files_reports_changed_files_with_lineage_wrapper(self) -> None:
+        """Verify changed-file notices keep the lineage wrapper when content exists."""
+        with TempWorkspace() as workspace:
+            from session_state import session
+            from tools.list_files import list_files
+
+            session.clear()
+            tracked_file = workspace.create_file("tracked.txt", "old")
+            session.track_file(str(tracked_file), 0, "old")
+            tracked_file.write_text("new", encoding="utf-8")
+
+            result = run_async(list_files())
+
+            self.assertIn("EOF\n[Lineage Message]:", result)
+            self.assertIn("[CHANGED_FILES]", result)
+            self.assertIn("tracked.txt", result)
+            self.assertEqual(session.mtimes[str(tracked_file)], get_file_mtime_ms(tracked_file))
+            session.clear()
+
+    def test_list_files_skips_empty_lineage_wrapper(self) -> None:
+        """Verify an empty formatter result does not produce a blank lineage trailer."""
+        with TempWorkspace() as workspace:
+            from tools.list_files import list_files
+
+            workspace.create_file("file.txt", "content")
+
+            with patch("tools.list_files.format_changed_files_section", return_value="   "):
+                result = run_async(list_files())
+
+            self.assertNotIn("EOF\n[Lineage Message]:", result)
+            self.assertNotIn("[Lineage Message]:", result)
 
 
 if __name__ == "__main__":

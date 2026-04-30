@@ -116,15 +116,17 @@ def get_changed_files() -> List[Dict[str, Any]]:
         file_path = Path(tracked_path)
 
         if not file_path.exists():
-            # File was deleted; report as changed
+            # File was deleted; report it once, then stop tracking it.
             changed.append({"path": tracked_path, "status": "deleted"})
+            session.untrack_file(tracked_path)
             continue
 
         try:
             current_mtime = get_file_mtime_ms(file_path)
         except OSError:
-            # File became unreadable; treat as deleted
+            # File became unreadable; treat it like a one-time deletion notice.
             changed.append({"path": tracked_path, "status": "deleted"})
+            session.untrack_file(tracked_path)
             continue
 
         if current_mtime > old_mtime:

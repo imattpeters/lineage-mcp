@@ -46,9 +46,9 @@ async def list_files(path: str = "") -> str:
 
     output = "\n".join(lines)
 
-    # Append changed files section
+    # Append changed files section when the formatter produced actual lineage content.
     changed_section = format_changed_files_section()
-    if changed_section:
-        output += f"\n\nEOF\n[Lineage Message]:{changed_section}"
+    if changed_section.strip():
+        output += f"\n\n[Lineage Message]:{changed_section}"
 
     return output

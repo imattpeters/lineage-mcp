@@ -42,7 +42,7 @@ class TestChangeDetection(unittest.TestCase):
             session.clear()
 
     def test_detect_deleted_file(self) -> None:
-        """Verify deleted files are detected."""
+        """Verify deleted files are detected once and then untracked."""
         with TempWorkspace() as ws:
             from file_watcher import get_changed_files
             from session_state import session
@@ -54,9 +54,13 @@ class TestChangeDetection(unittest.TestCase):
             session.track_file(str(fake_path), 12345, "content")
 
             changed = get_changed_files()
+            changed_again = get_changed_files()
 
             self.assertEqual(len(changed), 1)
             self.assertEqual(changed[0]["status"], "deleted")
+            self.assertEqual(changed_again, [])
+            self.assertNotIn(str(fake_path), session.mtimes)
+            self.assertNotIn(str(fake_path), session.contents)
 
             session.clear()
 
