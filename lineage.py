@@ -38,6 +38,56 @@ except Exception:
 # Create MCP server instance
 mcp = FastMCP("lineage")
 
+
+def _coerce_optional_int(name: str, value: int | str | None) -> int | None:
+    """Normalize optional integer tool arguments.
+
+    Empty strings are treated as omitted values so clients that serialize
+    optional fields as blank strings do not trip validation before the real
+    tool logic runs.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        stripped = value.strip()
+        if stripped == "":
+            return None
+        value = stripped
+    if isinstance(value, int):
+        return value
+    try:
+        return int(value)
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f"'{name}' must be an integer, got: {value!r}") from exc
+
+
+def _normalize_read_pagination_args(
+    offset: int | None,
+    limit: int | None,
+    cursor: int | None,
+) -> tuple[int | None, int | None, int | None]:
+    """Drop zero-valued placeholders when pagination modes would otherwise conflict.
+
+    Some MCP clients serialize omitted optional integers as `0`. When both the
+    line-based and cursor-based pagination parameters arrive together, prefer
+    the non-zero values and treat zero-valued siblings as omitted placeholders.
+    Explicit zero values are preserved when there is no mixed-mode conflict.
+    """
+    has_line_mode = offset is not None or limit is not None
+    has_cursor_mode = cursor is not None
+
+    if not (has_line_mode and has_cursor_mode):
+        return offset, limit, cursor
+
+    if offset == 0:
+        offset = None
+    if limit == 0:
+        limit = None
+    if cursor == 0:
+        cursor = None
+
+    return offset, limit, cursor
+
 def _get_client_name(ctx: Context | None) -> str | None:
     """Extract the MCP client name from the Context, if available."""
     try:
@@ -157,17 +207,10 @@ async def read(
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
         operations immediately and use ask_user() before proceeding.
     """
-    def _coerce_int(name: str, value: int | str | None) -> int | None:
-        if value is None or isinstance(value, int):
-            return value
-        try:
-            return int(value)
-        except (ValueError, TypeError):
-            raise ValueError(f"'{name}' must be an integer, got: {value!r}")
-
-    offset = _coerce_int("offset", offset)
-    limit = _coerce_int("limit", limit)
-    cursor = _coerce_int("cursor", cursor)
+    offset = _coerce_optional_int("offset", offset)
+    limit = _coerce_optional_int("limit", limit)
+    cursor = _coerce_optional_int("cursor", cursor)
+    offset, limit, cursor = _normalize_read_pagination_args(offset, limit, cursor)
 
     log_tool_call("read", ctx=ctx, file_path=file_path,
                   show_line_numbers=show_line_numbers,
