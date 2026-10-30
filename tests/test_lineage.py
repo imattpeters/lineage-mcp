@@ -86,5 +86,24 @@ class TestLineageReadNormalization(unittest.TestCase):
         read_file_mock.assert_awaited_once_with("test.txt", False, None, None, 0, 50000)
 
 
+class TestReadImageRegistration(unittest.TestCase):
+    """Tests for the read_image tool registration."""
+
+    def test_read_image_registers_without_output_schema(self) -> None:
+        """The registered read_image tool must not derive an output schema.
+
+        The module-level list() tool shadows the builtin list name in this
+        module's namespace, so any 'list' return annotation here would be
+        resolved to that tool object and generate an invalid output schema
+        that rejects valid image responses on the wire.
+        """
+        import lineage
+
+        registered_tools = lineage.mcp._tool_manager._tools
+        self.assertIn("read_image", registered_tools)
+
+        self.assertIsNone(registered_tools["read_image"].output_schema)
+
+
 if __name__ == "__main__":
     unittest.main()

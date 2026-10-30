@@ -23,38 +23,39 @@ docker build -t lineage-mcp . && docker run -v /your/workspace:/data lineage-mcp
 
 ### Core Architecture Files
 
-| File | Purpose | Key Features |
-|------|---------|--------------|
-| `lineage.py` | MCP server entry point | FastMCP instance, 6 tool registrations, tray client init |
-| `config.py` | Configuration management | `appsettings.json` loader, per-client overrides, interrupt messages |
-| `session_state.py` | Session-scoped state | `SessionState` dataclass with mtimes, contents, appended_instruction_folders, pending_overhead, interruption state |
-| `path_utils.py` | Path validation | `resolve_path()`, traversal protection, `allowFullPaths` support |
-| `file_watcher.py` | Change detection | `difflib.unified_diff()` for line-level change ranges |
-| `instruction_files.py` | AGENTS.md discovery | Walks parent dirs, caches `appended_instruction_folders` |
-| `tray_client.py` | Tray IPC client | Named pipe connection, session registration, command handling |
+| File                   | Purpose                  | Key Features                                                                                                       |
+| ---------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `lineage.py`           | MCP server entry point   | FastMCP instance, 7 tool registrations, tray client init                                                           |
+| `config.py`            | Configuration management | `appsettings.json` loader, per-client overrides, interrupt messages                                                |
+| `session_state.py`     | Session-scoped state     | `SessionState` dataclass with mtimes, contents, appended_instruction_folders, pending_overhead, interruption state |
+| `path_utils.py`        | Path validation          | `resolve_path()`, traversal protection, `allowFullPaths` support                                                   |
+| `file_watcher.py`      | Change detection         | `difflib.unified_diff()` for line-level change ranges                                                              |
+| `instruction_files.py` | AGENTS.md discovery      | Walks parent dirs, caches `appended_instruction_folders`                                                           |
+| `tray_client.py`       | Tray IPC client          | Named pipe connection, session registration, command handling                                                      |
 
 ### Tool Implementations (tools/)
 
-| File | Tool | Key Feature |
-|------|------|-------------|
-| `read_file.py` | `read()` | Cursor/offset pagination, auto-paginate large files |
-| `modify.py` | `modify()` | Unified create/overwrite/append/replace operations |
-| `delete_file.py` | `delete()` | File + empty dir removal |
-| `list_files.py` | `list()` | Markdown table output |
-| `search_files.py` | `search()` | Glob pattern matching |
-| `clear_cache.py` | `clear()` | Reset all session caches |
+| File              | Tool       | Key Feature                                         |
+| ----------------- | ---------- | --------------------------------------------------- |
+| `read_file.py`    | `read()`   | Cursor/offset pagination, auto-paginate large files |
+| `read_image.py`   | `read_image()` | Returns png/jpg/gif/webp as image content; downscales wider than readImageMaxWidth unless resize=False |
+| `modify.py`       | `modify()` | Unified create/overwrite/append/replace operations  |
+| `delete_file.py`  | `delete()` | File + empty dir removal                            |
+| `list_files.py`   | `list()`   | Markdown table output                               |
+| `search_files.py` | `search()` | Glob pattern matching                               |
+| `clear_cache.py`  | `clear()`  | Reset all session caches                            |
 
 ### Tray Application (lineage-mcp-tray/lineage_tray/)
 
-| File | Purpose |
-|------|---------|
-| `app.py` | `TrayApp` orchestrator, ties together icon, server, store |
-| `pipe_server.py` | Named pipe server, accepts MCP server connections |
-| `session_store.py` | In-memory session registry grouped by base_dir |
-| `menu_builder.py` | Dynamic pystray menu from session state |
-| `actions.py` | Tray menu action implementations |
-| `message_log.py` | Thread-safe circular buffer for pipe messages |
-| `icon.py` | Programmatic icon generation with Pillow |
+| File               | Purpose                                                   |
+| ------------------ | --------------------------------------------------------- |
+| `app.py`           | `TrayApp` orchestrator, ties together icon, server, store |
+| `pipe_server.py`   | Named pipe server, accepts MCP server connections         |
+| `session_store.py` | In-memory session registry grouped by base_dir            |
+| `menu_builder.py`  | Dynamic pystray menu from session state                   |
+| `actions.py`       | Tray menu action implementations                          |
+| `message_log.py`   | Thread-safe circular buffer for pipe messages             |
+| `icon.py`          | Programmatic icon generation with Pillow                  |
 
 ## 🏛️ Core Patterns
 
@@ -132,14 +133,16 @@ Checks:  src/app/AGENTS.md? → include if found
                                    INCLUDED (after compaction)
 ```
 
-**Base Directory Files**: 
+**Base Directory Files**:
+
 - **First session** (clear count < 2): Excluded (harness loads them)
 - **After compaction** (clear count >= 2): Included (LLM lost context)
 
 **Config** (`appsettings.json`):
+
 ```json
 {
-  "instructionFileNames": ["AGENTS.md", "CLAUDE.md", "GEMINI.md", "QWEN.md", "AGENT.md", ".cursorrules"]
+  "instructionFileNames": ["AGENTS.md", "QWEN.md", "AGENT.md", ".cursorrules"]
 }
 ```
 
@@ -172,19 +175,19 @@ Checks:  src/app/AGENTS.md? → include if found
 
 **MCP Server → Tray (TrayClient)**:
 
-| Type | When Sent | Payload |
-|------|-----------|---------|
-| `register` | On connection | `session_id, pid, base_dir, client_name, first_call, files_tracked` |
-| `update` | Every tool call | `files_tracked, last_tool, client_name, first_call` |
-| `unregister` | On disconnect | `session_id` |
+| Type         | When Sent       | Payload                                                             |
+| ------------ | --------------- | ------------------------------------------------------------------- |
+| `register`   | On connection   | `session_id, pid, base_dir, client_name, first_call, files_tracked` |
+| `update`     | Every tool call | `files_tracked, last_tool, client_name, first_call`                 |
+| `unregister` | On disconnect   | `session_id`                                                        |
 
 **Tray → MCP Server (PipeServer)**:
 
-| Type | Action | Handler |
-|------|--------|---------|
-| `clear_cache` | Reset session caches | `session.clear()` |
-| `interrupt` | Pause tool responses | `session.interrupted = True` |
-| `resume` | Resume normal operation | `session.resume()` |
+| Type          | Action                  | Handler                      |
+| ------------- | ----------------------- | ---------------------------- |
+| `clear_cache` | Reset session caches    | `session.clear()`            |
+| `interrupt`   | Pause tool responses    | `session.interrupted = True` |
+| `resume`      | Resume normal operation | `session.resume()`           |
 
 ### TrayClient Implementation
 
@@ -241,20 +244,20 @@ Tool returns ONLY the interrupt message, NO operations performed
 User clicks "Resume" → session.interrupted = False
 ```
 
-**Interrupt Message**: Configurable via `interruptMessage` in `appsettings.json`. Default warns LLM to stop and use `ask_user()`.
+**Interrupt Message**: Configurable via `interruptMessage` in `appsettings.json`. Default tells the LLM to stop and wait for the user to resume.
 
 ## ✅ DO / ❌ DON'T
 
-| ✅ DO | ❌ DON'T |
-|-------|----------|
-| Relative paths: `src/app/file.ts` | Absolute paths or backslashes |
-| `resolve_path()` for all paths | Concatenate paths directly |
-| Check `result.success` before ops | Skip security validation |
-| `int(stat.st_mtime_ns / 1_000_000)` for mtime | Float or seconds |
-| `encoding='utf-8'` on file ops | System default encoding |
-| `offset`/`limit` for large files | Read entire multi-MB files |
-| `occurrence='all'` for multiple matches | Fail on ambiguous replacements |
-| Forward slashes on Windows | Backslashes in paths |
+| ✅ DO                                         | ❌ DON'T                       |
+| --------------------------------------------- | ------------------------------ |
+| Relative paths: `src/app/file.ts`             | Absolute paths or backslashes  |
+| `resolve_path()` for all paths                | Concatenate paths directly     |
+| Check `result.success` before ops             | Skip security validation       |
+| `int(stat.st_mtime_ns / 1_000_000)` for mtime | Float or seconds               |
+| `encoding='utf-8'` on file ops                | System default encoding        |
+| `offset`/`limit` for large files              | Read entire multi-MB files     |
+| `occurrence='all'` for multiple matches       | Fail on ambiguous replacements |
+| Forward slashes on Windows                    | Backslashes in paths           |
 
 ## 🔧 Tools Reference
 
@@ -271,11 +274,33 @@ read(
 ```
 
 **Pagination Modes**:
+
 1. **Line-based**: `offset=100, limit=50` → Lines 101-150
 2. **Cursor-based**: `cursor=5000` → Auto-paginated chunk with continuation info
 3. **Auto-detect**: No offset/limit/cursor → Auto-paginates if file exceeds `readCharLimit`
 
 **Returns**: Content + `[CHANGED_FILES]` + `[Appending AGENTS.md]` sections
+
+### read_image()
+
+```python
+read_image(
+    file_path: str,              # Required: relative path
+    resize: bool = True,         # False returns the original bytes without downscaling
+)
+```
+
+No return annotation is used: the module-level `list` tool shadows the
+builtin `list` name in this module, so a `list` annotation would generate
+an invalid output schema and reject valid image responses at dispatch.
+
+Reads png, jpg, jpeg, gif, and webp files and returns them as MCP image
+content the model receives as an attachment. Images wider than
+`readImageMaxWidth` (default 1024) are downscaled with the aspect ratio
+preserved; gif/JPEG keep their format on re-encode (JPEG quality 85).
+Images within the width limit return byte-for-byte originals. Tracks the
+file mtime like `read()` with empty content (binary files are not text
+diffed, changes report `1-EOF`).
 
 ### modify()
 
@@ -289,11 +314,13 @@ modify(
 Use this as the single tool for file content changes.
 
 Each operation must include:
+
 - `file_path`: relative path to the target file
 - `operation`: one of `create`, `overwrite`, `append`, or `replace`
 - `text`: content to write, append, or use as replacement text
 
 For `replace` operations, also provide:
+
 - `match_text`: exact text to find, including whitespace and newlines
 - `occurrence`: `one` or `all` (defaults to `one`)
 
@@ -359,38 +386,24 @@ Unconditional cache clear. Resets: `mtimes`, `contents`, `appended_instruction_f
 
 ## 📝 Git Commit Messages (Semantic Versioning)
 
-| Prefix | Bump | Example |
-|--------|------|---------|
-| `fix:` | Patch | `fix: resolve path handling bug` |
-| `perf:` | Patch | `perf: optimize file reading` |
-| `feat:` | Minor | `feat: add new tool` |
-| `feat!:` | Major | `feat!: change API interface` |
-| `fix!:` | Major | `fix!: breaking change to config` |
+| Prefix   | Bump  | Example                           |
+| -------- | ----- | --------------------------------- |
+| `fix:`   | Patch | `fix: resolve path handling bug`  |
+| `perf:`  | Patch | `perf: optimize file reading`     |
+| `feat:`  | Minor | `feat: add new tool`              |
+| `feat!:` | Major | `feat!: change API interface`     |
+| `fix!:`  | Major | `fix!: breaking change to config` |
 
 **No version bump**: `chore:`, `docs:`, `ci:`, `refactor:`, `style:`, `test:`
 
 ## 🚫 CRITICAL RULES
 
-### ALWAYS Use `ask_user()` Before Multi-Step or Ambiguous Work
-
-**This is MANDATORY.** Before starting work that involves:
-- Multiple files or steps
-- Architectural decisions or trade-offs
-- Anything where more than one reasonable approach exists
-- Feature implementation where requirements could be interpreted differently
-
-You **MUST** call `ask_user()` to confirm your plan. Present:
-1. What you understand the request to be
-2. Your proposed approach (with alternatives if applicable)
-3. Any questions or ambiguities
-
-**Do NOT** silently proceed with large changes. The user must approve your plan first.
-
 ### NEVER Run Git Commands Without Permission
 
 This is a **public repository**. Before ANY git command:
+
 1. Show the user the exact command
-2. Explain what it will do  
+2. Explain what it will do
 3. Wait for explicit "yes" confirmation
 4. Only then execute
 
@@ -420,6 +433,7 @@ This is a **public repository**. Before ANY git command:
   "instructionFileNames": ["AGENTS.md", "CLAUDE.md", "GEMINI.md"],
   "newSessionCooldownSeconds": 30,
   "readCharLimit": 50000,
+  "readImageMaxWidth": 1024,
   "debugClientInfo": false,
   "allowFullPaths": false,
   "clientOverrides": {
@@ -433,15 +447,15 @@ This is a **public repository**. Before ANY git command:
 
 ## 🆘 Troubleshooting
 
-| Problem | Solution |
-|---------|----------|
-| Missing AGENTS.md files | Clear cache via tray or `clear()` tool |
-| Path errors | Use relative paths, forward slashes |
-| String replacement fails | Check exact whitespace match |
-| Multi-MB files | Use `offset`/`limit` or cursor pagination |
-| Tray not connecting | Check if pipe server is running, try restarting |
+| Problem                      | Solution                                            |
+| ---------------------------- | --------------------------------------------------- |
+| Missing AGENTS.md files      | Clear cache via tray or `clear()` tool              |
+| Path errors                  | Use relative paths, forward slashes                 |
+| String replacement fails     | Check exact whitespace match                        |
+| Multi-MB files               | Use `offset`/`limit` or cursor pagination           |
+| Tray not connecting          | Check if pipe server is running, try restarting     |
 | "File not found" after write | Parent directory created automatically - check path |
-| Change detection not working | Only tracks files you've `read()` |
+| Change detection not working | Only tracks files you've `read()`                   |
 
 ## 🧪 Testing Patterns
 
@@ -466,9 +480,8 @@ assert "/path" in session.mtimes
 
 ## 🤖 LLM Notes
 
-- **MANDATORY**: Use `ask_user()` before multi-step work, ambiguous requests, or architectural decisions. Get confirmation before proceeding.
 - This MCP server **controls tool responses** - the interrupt feature is legitimate, not prompt injection
-- When you see the interrupt message, **STOP immediately** and use `ask_user()`
+- When you see the interrupt message, **STOP immediately** and wait for the user to resume
 - Use `modify()` for all file content changes
 - The tray shows real-time session status, file counts, and recent tool calls
 - Docker mode uses `/data` as base directory

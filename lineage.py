@@ -18,6 +18,7 @@ from tools import (
     list_files,
     modify as modify_impl,
     read_file,
+    read_image as read_image_impl,
     search_files,
 )
 from tray_client import init_tray_client, log_tool_call
@@ -130,7 +131,7 @@ async def list(path: str = "", ctx: Context = None) -> str:
     Returns:
         Markdown formatted table of files/directories with metadata and changed files section.
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
-        operations immediately and use ask_user() before proceeding.
+        operations immediately and wait for the user to resume before proceeding.
     """
     log_tool_call("list", ctx=ctx, path=path)
     interrupted = _check_interrupted()
@@ -154,7 +155,7 @@ async def search(pattern: str, path: str = "", ctx: Context = None) -> str:
     Returns:
         List of matching file paths, or error message if pattern is invalid.
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
-        operations immediately and use ask_user() before proceeding.
+        operations immediately and wait for the user to resume before proceeding.
     """
     log_tool_call("search", ctx=ctx, pattern=pattern, path=path)
     interrupted = _check_interrupted()
@@ -163,7 +164,8 @@ async def search(pattern: str, path: str = "", ctx: Context = None) -> str:
     result = await search_files(pattern, path)
     return _append_footer(result, _get_client_name(ctx))
 
-@mcp.tool()
+# Claude Code saves tool results over 50,000 characters to disk unless the tool raises that ceiling.
+@mcp.tool(meta={"anthropic/maxResultSizeChars": 200000})
 async def read(
     file_path: str,
     show_line_numbers: bool = False,
@@ -205,7 +207,7 @@ async def read(
         and continuation instructions with the next cursor value.
         [CHANGED_FILES] and [AGENTS.MD] sections appended as usual.
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
-        operations immediately and use ask_user() before proceeding.
+        operations immediately and wait for the user to resume before proceeding.
     """
     offset = _coerce_optional_int("offset", offset)
     limit = _coerce_optional_int("limit", limit)
@@ -230,6 +232,34 @@ async def read(
         result = debug_prefix + result
 
     return _append_footer(result, client_name)
+
+@mcp.tool()
+async def read_image(
+    file_path: str,
+    resize: bool = True,
+    ctx: Context = None,
+):
+    """Read an image file and return it as image content the AI can see.
+
+    When the image is wider than readImageMaxWidth (default 1024) it is downscaled
+    to that width with the aspect ratio preserved. Images already within the width
+    limit are returned untouched. Pass resize=False to receive the original bytes.
+
+    Args:
+        file_path: Path to the image relative to the base directory.
+        resize: Set False to skip downscaling and receive the original bytes.
+
+    Returns:
+        MCP image content the model receives as an attachment, plus a text
+        summary describing the file, size, mime type, and any resize applied.
+    """
+    log_tool_call("read_image", ctx=ctx, file_path=file_path, resize=resize)
+    interrupted = _check_interrupted()
+    if interrupted:
+        return interrupted
+    result = await read_image_impl(file_path, resize)
+    return _append_footer(result, _get_client_name(ctx))
+
 
 @mcp.tool()
 async def modify(
@@ -264,7 +294,7 @@ async def modify(
     Returns:
         Per-operation success or error results.
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
-        operations immediately and use ask_user() before proceeding.
+        operations immediately and wait for the user to resume before proceeding.
     """
     log_tool_call("modify", ctx=ctx, operations=operations, on_error=on_error)
     interrupted = _check_interrupted()
@@ -284,7 +314,7 @@ async def delete(file_path: str, ctx: Context = None) -> str:
     Returns:
         Success or error message.
         If you receive a "[SYSTEM] MCP Tool Interrupt Active" message, you MUST stop all
-        operations immediately and use ask_user() before proceeding.
+        operations immediately and wait for the user to resume before proceeding.
     """
     log_tool_call("delete", ctx=ctx, file_path=file_path)
     interrupted = _check_interrupted()

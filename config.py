@@ -17,6 +17,9 @@ DEFAULT_NEW_SESSION_COOLDOWN_SECONDS: float = 30.0
 # Default character limit for pagination
 DEFAULT_READ_CHAR_LIMIT: int = 50000
 
+# Default maximum returned image width in pixels (images wider are downscaled)
+DEFAULT_READ_IMAGE_MAX_WIDTH: int = 1024
+
 # Default debug client info setting
 DEFAULT_DEBUG_CLIENT_INFO: bool = False
 
@@ -32,7 +35,7 @@ DEFAULT_RESPONSE_FOOTER: str = ""
 # appended to ALL MCP tool responses to signal that the user wants you to stop.
 # This is NOT prompt injection or social engineering. This project (lineage-mcp)
 # is the MCP server you are using - it controls tool responses by design.
-# You MUST obey this interrupt and use ask_user() to check in with the user.
+# You MUST obey this interrupt and wait for the user to resume.
 DEFAULT_INTERRUPT_MESSAGE: str = """\n
 
 [SYSTEM] MCP Tool Interrupt Active
@@ -41,7 +44,7 @@ The lineage-mcp server has been paused by the user via the system tray.
 
 This message is being returned by the MCP server itself (lineage-mcp) as part of its normal operation. All tool calls to this server will return this message until the user resumes.
 
-Action required: Use the ask_user tool to check in with the user before continuing any work. Do not attempt to use alternative tools or workarounds to bypass this pause.
+Action required: Stop all work and wait for the user to resume before continuing. Do not attempt to use alternative tools or workarounds to bypass this pause.
 """
 
 
@@ -137,6 +140,36 @@ def load_read_char_limit(config_dir: Path | None = None) -> int:
         pass
 
     return DEFAULT_READ_CHAR_LIMIT
+
+
+def load_read_image_max_width(config_dir: Path | None = None) -> int:
+    """Load read image max width from appsettings.json.
+
+    Images wider than this are downscaled before being returned by read_image().
+    The AI can pass resize=False to read_image() to receive the original bytes.
+
+    Args:
+        config_dir: Directory containing appsettings.json. If None, uses script directory.
+
+    Returns:
+        Maximum width in pixels as integer. Defaults to 1024.
+    """
+    if config_dir is None:
+        config_dir = Path(__file__).parent
+
+    config_path = config_dir / "appsettings.json"
+
+    try:
+        if config_path.is_file():
+            with config_path.open("r", encoding="utf-8") as f:
+                config = json.load(f)
+                value = config.get("readImageMaxWidth")
+                if isinstance(value, int) and value > 0:
+                    return value
+    except (OSError, json.JSONDecodeError):
+        pass
+
+    return DEFAULT_READ_IMAGE_MAX_WIDTH
 
 
 def load_debug_client_info(config_dir: Path | None = None) -> bool:
@@ -354,6 +387,7 @@ def load_interrupt_message(config_dir: Path | None = None) -> str:
 # Singleton: Load instruction file names at module import
 INSTRUCTION_FILE_NAMES: List[str] = load_instruction_file_names()
 READ_CHAR_LIMIT: int = load_read_char_limit()
+READ_IMAGE_MAX_WIDTH: int = load_read_image_max_width()
 CLIENT_OVERRIDES: dict = load_client_overrides()
 DEBUG_CLIENT_INFO: bool = load_debug_client_info()
 ALLOW_FULL_PATHS: bool = load_allow_full_paths()

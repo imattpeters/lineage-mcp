@@ -11,6 +11,7 @@ from instruction_files import (
 )
 from path_utils import get_base_dir, get_file_mtime_ms, resolve_path
 from session_state import session
+from tools.read_image import IMAGE_EXTENSIONS, is_image_file
 
 
 def extract_content_by_cursor(
@@ -171,6 +172,15 @@ async def read_file(
         return f"Error: File not found: {file_path} (base directory: {get_base_dir()})"
     if not full_path.is_file():
         return f"Error: Path is not a file: {file_path} (base directory: {get_base_dir()})"
+
+    if is_image_file(full_path):
+        supported = ", ".join(sorted(IMAGE_EXTENSIONS))
+        return (
+            f"Binary image: {file_path}. This server does not return image bytes through read(). "
+            f"Call read_image(file_path=\"{file_path}\") instead to get the image as visible content "
+            "(it is downscaled to the configured max width unless you pass resize=False). "
+            f"Supported image types: {supported}."
+        )
 
     # Read full file content once
     try:

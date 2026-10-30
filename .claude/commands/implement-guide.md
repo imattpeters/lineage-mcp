@@ -71,6 +71,7 @@ When you believe you have finished the implementation:
 ## Important Rules
 
 ### DO NOT
+
 - ❌ Skip steps in the guide
 - ❌ Modify files that aren't explicitly listed as [CREATE] or [MODIFY]
 - ❌ Make architectural changes beyond what the guide describes
@@ -79,6 +80,7 @@ When you believe you have finished the implementation:
 - ❌ Implement features that aren't in the guide (unless explicitly told to)
 
 ### DO
+
 - ✅ Read the entire guide before starting
 - ✅ Verify guide accuracy against actual codebase
 - ✅ Mark items as done immediately when completed
@@ -92,12 +94,8 @@ When you believe you have finished the implementation:
 Begin by reading the implementation guide provided: $ARGUMENTS
 
 ---
-
-Always use #askUser before completing any guide to confirm the result matches what the user is expecting.
-
----
-
 When you think you're done:
+
 1. Re-read the entire implementation guide
 2. Make sure every checkbox is marked [x]
 3. Review your Notes section

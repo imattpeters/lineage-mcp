@@ -244,6 +244,83 @@ class TestGetReadCharLimit(unittest.TestCase):
             config.CLIENT_OVERRIDES = old_overrides
 
 
+class TestReadImageMaxWidth(unittest.TestCase):
+    """Tests for the readImageMaxWidth setting."""
+
+    def test_load_read_image_max_width_default(self) -> None:
+        """Default is 1024 when no config file."""
+        with TempWorkspace() as ws:
+            from config import load_read_image_max_width
+
+            result = load_read_image_max_width(ws.path)
+
+            self.assertEqual(result, 1024)
+
+    def test_load_read_image_max_width_from_config(self) -> None:
+        """Returns configured value when valid."""
+        with TempWorkspace() as ws:
+            from config import load_read_image_max_width
+
+            config = {"readImageMaxWidth": 2048}
+            config_path = ws.path / "appsettings.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+
+            result = load_read_image_max_width(ws.path)
+
+            self.assertEqual(result, 2048)
+
+    def test_load_read_image_max_width_ignores_zero(self) -> None:
+        """Zero falls back to the default."""
+        with TempWorkspace() as ws:
+            from config import load_read_image_max_width
+
+            config = {"readImageMaxWidth": 0}
+            config_path = ws.path / "appsettings.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+
+            result = load_read_image_max_width(ws.path)
+
+            self.assertEqual(result, 1024)
+
+    def test_load_read_image_max_width_ignores_negative(self) -> None:
+        """Negative values fall back to the default."""
+        with TempWorkspace() as ws:
+            from config import load_read_image_max_width
+
+            config = {"readImageMaxWidth": -50}
+            config_path = ws.path / "appsettings.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+
+            result = load_read_image_max_width(ws.path)
+
+            self.assertEqual(result, 1024)
+
+    def test_load_read_image_max_width_ignores_non_int(self) -> None:
+        """Non-integer values fall back to the default."""
+        with TempWorkspace() as ws:
+            from config import load_read_image_max_width
+
+            config = {"readImageMaxWidth": "wide"}
+            config_path = ws.path / "appsettings.json"
+            config_path.write_text(json.dumps(config), encoding="utf-8")
+
+            result = load_read_image_max_width(ws.path)
+
+            self.assertEqual(result, 1024)
+
+    def test_load_read_image_max_width_ignores_invalid_json(self) -> None:
+        """Invalid JSON falls back to the default."""
+        with TempWorkspace() as ws:
+            from config import load_read_image_max_width
+
+            config_path = ws.path / "appsettings.json"
+            config_path.write_text("not valid json", encoding="utf-8")
+
+            result = load_read_image_max_width(ws.path)
+
+            self.assertEqual(result, 1024)
+
+
 class TestDebugClientInfo(unittest.TestCase):
     """Tests for the debugClientInfo setting."""
 

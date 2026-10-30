@@ -8,6 +8,7 @@ from tools.delete_file import delete_file
 from tools.list_files import list_files
 from tools.modify import modify
 from tools.read_file import read_file
+from tools.read_image import read_image
 from tools.search_files import search_files
 
 __all__ = [
@@ -15,6 +16,7 @@ __all__ = [
     "list_files",
     "search_files",
     "read_file",
+    "read_image",
     "modify",
     "delete_file",
 ]

@@ -28,6 +28,7 @@ Lineage MCP is a file operation server for LLM coding agents that solves two cri
 | **Change Detection**      | Line-level diff detection for externally modified files         |
 | **Instruction Discovery** | Auto-finds AGENTS.md, CLAUDE.md, etc. in parent directories     |
 | **Security**              | Path traversal protection keeps operations within the workspace |
+| **Image Reading**         | Returns images to the LLM as visible content (png, jpg, gif, webp) |
 | **Partial Reads**         | Read specific line ranges for large files (offset/limit)        |
 | **Line Numbers**          | Optional line number formatting for precise code references     |
 | **Session Cooldown**      | Prevents redundant cache clears during initial AI tool bursts   |
@@ -149,6 +150,7 @@ OpenCode uses a [plugin system](https://opencode.ai/docs/plugins) for hooks. See
 | `list`       | List directory contents        | `path` (optional)                                      |
 | `search`     | Search files by glob pattern   | `pattern`, `path` (optional)                           |
 | `read`       | Read file with change tracking | `file_path`, `show_line_numbers`, `offset`, `limit`, `cursor` |
+| `read_image` | Read an image as visible model content | `file_path`, `resize` (optional, pass `false` to skip downscaling) |
 | `modify` | Modify one or more files | `operations`, `on_error` (optional) |
 | `delete`     | Delete file or empty directory | `file_path`                                            |
 | `clear`      | Clear all session caches       | (none)                                                 |
@@ -189,6 +191,21 @@ search("**/*.py")
 # Find config files in src/
 search("*.config.*", path="src")
 ```
+
+### Reading Images
+
+```python
+# Returns the image as visible content (image content block)
+read_image("assets/screenshot.png")
+
+# Skip the automatic downscaling to 1024px wide
+read_image("assets/photo.jpg", resize=False)
+```
+
+Images wider than `readImageMaxWidth` (default 1024) are downscaled with the
+aspect ratio preserved, so a 4000px phone photo does not flood the model's
+context. Images within the limit are returned untouched. Supported types:
+png, jpg, jpeg, gif, webp.
 
 ### File Modification
 
@@ -288,6 +305,17 @@ Update the `appsettings.json` to customize instruction file names and priority:
 ```
 
 Files are checked in priority order - first match per folder is used.
+
+### Image Reading
+
+Images wider than the configured width are downscaled before reaching the
+model. `read_image` accepts `resize=false` to return the original bytes.
+
+```json
+{
+  "readImageMaxWidth": 1024
+}
+```
 
 ### Allow Full Paths
 
